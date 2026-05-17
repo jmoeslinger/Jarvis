@@ -124,9 +124,9 @@ class MemoryStore:
                 if not self._entries:
                     return "Keine Einträge zum Sichern."
                 count = len(self._entries)
-            import shutil, datetime
+            import shutil
             # Zeitgestempeltes Backup zusätzlich zum Basis-Backup
-            ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
             dest = _BACKUP_FILE.parent / f"memories_{ts}.backup.json"
             shutil.copy2(self._file, _BACKUP_FILE)   # aktuelles Basis-Backup
             shutil.copy2(self._file, dest)            # zeitgestempeltes Backup

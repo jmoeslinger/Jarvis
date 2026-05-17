@@ -100,8 +100,6 @@ def run_terminal(
         )
 
         # Polling mit Abbruch-Check (in separatem Thread, damit Pipes nie blockieren)
-        import threading as _threading
-
         _stdout_buf: list = []
         _stderr_buf: list = []
 
@@ -112,8 +110,8 @@ def run_terminal(
             except Exception:
                 pass
 
-        t_out = _threading.Thread(target=_reader, args=(proc.stdout, _stdout_buf), daemon=True)
-        t_err = _threading.Thread(target=_reader, args=(proc.stderr, _stderr_buf), daemon=True)
+        t_out = threading.Thread(target=_reader, args=(proc.stdout, _stdout_buf), daemon=True)
+        t_err = threading.Thread(target=_reader, args=(proc.stderr, _stderr_buf), daemon=True)
         t_out.start()
         t_err.start()
 
