@@ -431,6 +431,27 @@ class JarvisCore:
         self._fire_settings_changed()
         self._notify("system", f"✋ Interrupt-Erkennung: {'AN' if enabled else 'AUS'}")
 
+    def set_whisper_mode(self, enabled: bool):
+        """
+        Schaltet den Flüstermodus ein/aus.
+        Wenn aktiv: Jarvis erkennt leise Sprache und antwortet entsprechend gedämpft.
+        """
+        self.settings.whisper_mode = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        self._notify("system", f"🤫 Flüstermodus: {'AN' if enabled else 'AUS'}")
+
+    def set_multi_command(self, enabled: bool):
+        """
+        Schaltet Mehrfachbefehle ein/aus.
+        Wenn aktiv: Sätze mit 'und dann', 'danach', 'außerdem' werden
+        in einzelne Aufgaben aufgeteilt und nacheinander abgearbeitet.
+        """
+        self.settings.multi_command = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        self._notify("system", f"📋 Mehrfachbefehle: {'AN' if enabled else 'AUS'}")
+
     def enroll_speaker(self, duration_s: float = 6.0) -> bool:
         """
         Nimmt eine Stimmprobe auf und erstellt das Sprecher-Profil.
@@ -574,8 +595,9 @@ class JarvisCore:
 
         if cmd:
             cmd = self._apply_emotion_hint(cmd)
+            cmd = self._apply_whisper_hint(cmd)
             self._notify("user", cmd)
-            self._run_command(cmd)
+            self._dispatch_command(cmd)
         else:
             self._notify("system", "Kein Folgebefehl erkannt.")
 
@@ -604,6 +626,40 @@ class JarvisCore:
         except Exception as exc:
             logger.debug(f"Emotion-Hint: {exc}")
         return command
+
+    def _apply_whisper_hint(self, command: str) -> str:
+        """
+        Fügt einen Flüster-Kontext-Hinweis an den Befehl an, falls
+        whisper_mode aktiviert ist und die letzte Aufnahme als Flüstern erkannt wurde.
+        Jarvis antwortet dann leiser / gedämpfter (KI bekommt den Kontext).
+        """
+        if not self.settings.whisper_mode:
+            return command
+        if not getattr(self.recognizer, "_was_whisper", False):
+            return command
+        logger.debug("Flüstermodus: leise Eingabe erkannt")
+        return f"[Nutzer flüstert] {command}"
+
+    def _split_commands(self, text: str) -> list:
+        """
+        Zerlegt einen Satz mit mehreren Befehlen in Einzelbefehle.
+        Erkennt deutsche Verbindungswörter: 'und dann', 'danach', 'außerdem', etc.
+        Gibt immer mindestens eine Liste mit einem Element zurück.
+        """
+        import re
+        # Trennmuster: Konjunktionen die neue Teilbefehle einleiten
+        # Reihenfolge: längere Muster zuerst um Überschneidungen zu vermeiden
+        _SPLIT_PATTERN = re.compile(
+            r"(?:,?\s+(?:und\s+dann|und\s+danach|und\s+außerdem|danach|"
+            r"außerdem|dann\s+auch|dann\s+bitte|anschließend|daneben|"
+            r"zusätzlich\s+(?:dazu\s+)?(?:auch\s+)?)|"
+            r";\s*)",
+            re.IGNORECASE,
+        )
+        parts = _SPLIT_PATTERN.split(text.strip())
+        # Nur nicht-leere Teile mit mindestens 4 Zeichen behalten
+        result = [p.strip() for p in parts if p and len(p.strip()) >= 4]
+        return result if result else [text.strip()]
 
     def _init_local_ww_detector(self, silent: bool = False) -> bool:
         """
@@ -939,6 +995,7 @@ class JarvisCore:
             # Wake-Word aus dem Text herausschneiden falls vorhanden
             inline = self._extract_inline_command(text_clean) or text_clean
             inline = self._apply_emotion_hint(inline)
+            inline = self._apply_whisper_hint(inline)
             logger.info(f"Dauerhaftes Zuhören: '{inline}'")
             if self._activation_lock.acquire(blocking=False):
                 threading.Thread(
@@ -1045,8 +1102,9 @@ class JarvisCore:
                     inline_command = None
             if inline_command:
                 inline_command = self._apply_emotion_hint(inline_command)
+                inline_command = self._apply_whisper_hint(inline_command)
                 self._notify("user", inline_command)
-                self._run_command(inline_command)
+                self._dispatch_command(inline_command)
         else:
             # Nur Wake-Word → bestätigen (außer bei Hotkey-Aktivierung)
             if not silent:
@@ -1068,8 +1126,9 @@ class JarvisCore:
                         command = None
                 if command:
                     command = self._apply_emotion_hint(command)
+                    command = self._apply_whisper_hint(command)
                     self._notify("user", command)
-                    self._run_command(command)
+                    self._dispatch_command(command)
             else:
                 self.synthesizer.speak("Entschuldigung, ich habe nichts verstanden.")
                 self._notify("system", "Kein Befehl erkannt.")
@@ -1089,6 +1148,30 @@ class JarvisCore:
         if was_listening and self._running:
             self._set_state(State.WAKE_LISTENING)
             self._start_bg_listen()
+
+    def _dispatch_command(self, command: str):
+        """
+        Verteilt einen Befehl — entweder direkt oder als Mehrfachbefehle.
+        Bei aktivierten Mehrfachbefehlen wird der Text auf bekannte Konjunktionen geprüft.
+        Der erste Teilbefehl wird sofort ausgeführt, weitere werden in die Queue eingereiht.
+        """
+        if self.settings.multi_command:
+            parts = self._split_commands(command)
+        else:
+            parts = [command]
+
+        if len(parts) > 1:
+            n = len(parts)
+            self._notify("system", f"📋 {n} Befehle erkannt — werden nacheinander ausgeführt")
+            logger.info(f"Mehrfachbefehle: {parts}")
+            # Ersten Befehl sofort ausführen
+            self._run_command(parts[0])
+            # Rest in Queue stellen
+            for extra in parts[1:]:
+                self._notify("user", extra)
+                self.send_text_command(extra)
+        else:
+            self._run_command(command)
 
     def _run_command(self, command: str, cancel_event: Optional[threading.Event] = None):
         """

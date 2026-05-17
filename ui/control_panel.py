@@ -357,6 +357,8 @@ class ControlPanel:
             ("😊   Emotion erkennen",       "emotion_detection"),
             ("⏸   Pausen verstehen",        "smart_pause"),
             ("✋   Interrupt stoppen",       "interrupt_handling"),
+            ("🤫   Flüstermodus",           "whisper_mode"),
+            ("📋   Mehrfachbefehle",        "multi_command"),
         ]
         self._analyse_btns: Dict[str, ctk.CTkButton] = {}
         for lbl, key in _ANALYSE_MODES:
@@ -915,6 +917,8 @@ class ControlPanel:
             "emotion_detection":   self._jarvis.set_emotion_detection,
             "smart_pause":         self._jarvis.set_smart_pause,
             "interrupt_handling":  self._jarvis.set_interrupt_handling,
+            "whisper_mode":        self._jarvis.set_whisper_mode,
+            "multi_command":       self._jarvis.set_multi_command,
         }
         fn = dispatch.get(key)
         if fn:

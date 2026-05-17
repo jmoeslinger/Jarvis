@@ -37,6 +37,7 @@ class SpeechRecognizer:
         self._device: Optional[int] = None if device < 0 else device
         self._last_audio: Optional[bytes] = None   # Letztes aufgenommenes Audio (für Emotion-Analyse)
         self.smart_pause: bool = False              # Adaptiver Pausen-Modus
+        self._was_whisper: bool = False             # True wenn letzte Aufnahme Flüstersprache war
 
         if api_key and api_base:
             try:
@@ -247,6 +248,7 @@ class SpeechRecognizer:
         speech_started  = False
         silence_count   = 0
         speech_chunks   = 0   # Für Smart-Pause: Sprechdauer messen
+        speech_dbs: list[float] = []   # Für Flüstermodus: dB-Werte der Sprachframes
 
         with sd.InputStream(
             samplerate=_SAMPLERATE,
@@ -265,6 +267,7 @@ class SpeechRecognizer:
                     speech_started = True
                     silence_count  = 0
                     speech_chunks += 1
+                    speech_dbs.append(db)
                     frames.append(chunk.copy())
 
                 elif speech_started:
@@ -294,6 +297,14 @@ class SpeechRecognizer:
 
         if not speech_started or len(frames) < 2:
             return None
+
+        # Flüstermodus: war die mittlere Sprachlautstärke nah am Schwellenwert?
+        # Normale Sprache liegt 10–20 dB über dem Threshold; Flüstern kaum darüber.
+        if speech_dbs:
+            mean_speech_db = sum(speech_dbs) / len(speech_dbs)
+            self._was_whisper = mean_speech_db < (self._threshold + 9.0)
+        else:
+            self._was_whisper = False
 
         all_samples = np.concatenate(frames)
         buf = io.BytesIO()

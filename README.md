@@ -22,6 +22,10 @@ The idea was simple: I wanted an assistant that feels like something out of a sc
 - **Memory** — Jarvis permanently remembers information about you
 - **Emotion detection** — responds to your mood in your voice
 - **Speaker recognition** — only reacts to your voice (optional)
+- **Smart pause** — natural speech detection, no premature cut-offs
+- **Interrupt handling** — stops speaking when you start talking
+- **Whisper mode** — responds when you speak quietly (disableable per user)
+- **Multiple commands** — "Open Spotify and then set a timer for 10 minutes"
 - **Local wake word** — "Hey Jarvis" offline, no internet required
 - **Recurring tasks** — automated reminders and scheduled commands
 - **Task queue** — process multiple commands one after another
@@ -156,4 +160,4 @@ By using Jarvis you agree to the [Terms of Use](TERMS.md).
 
 ---
 
-*Version v0.2.0 — built with too much coffee and too little sleep*
+*Version v0.2.1 — built with too much coffee and too little sleep*

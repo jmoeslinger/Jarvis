@@ -250,6 +250,40 @@ class SettingsWindow:
             hover_color="#2244AA", border_color="#333355",
         ).pack(anchor="w", padx=20, pady=(14, 20))
 
+        # ── Abschnitt: Sprach-Features ────────────────────────────────
+        self._section(scroll, "Sprach-Features")
+        speech_card = self._card(scroll)
+
+        self._whisper_var = ctk.BooleanVar(value=self._settings.whisper_mode)
+        ctk.CTkCheckBox(
+            speech_card,
+            text="Flüstermodus — auf leise Sprache reagieren",
+            variable=self._whisper_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(14, 6))
+        ctk.CTkLabel(
+            speech_card,
+            text="Jarvis erkennt Flüstersprache und antwortet angepasst",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._multi_cmd_var = ctk.BooleanVar(value=self._settings.multi_command)
+        ctk.CTkCheckBox(
+            speech_card,
+            text="Mehrfachbefehle — mehrere Aktionen in einem Satz",
+            variable=self._multi_cmd_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(6, 6))
+        ctk.CTkLabel(
+            speech_card,
+            text="z.B. \"Öffne Spotify und dann setze einen Timer für 10 Minuten\"",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 16))
+
         # ── Fehler & Speichern ────────────────────────────────────────
         self._err_lbl = ctk.CTkLabel(
             self._root, text="", text_color="#FF4455",
@@ -448,6 +482,8 @@ class SettingsWindow:
         self._settings.tts_rate           = rate_str
         self._settings.autostart_enabled  = self._autostart_var.get()
         self._settings.input_device       = input_device
+        self._settings.whisper_mode       = self._whisper_var.get()
+        self._settings.multi_command      = self._multi_cmd_var.get()
         self._settings.save()
 
         # Live anwenden
@@ -481,6 +517,13 @@ class SettingsWindow:
                     logger.info(f"Mikrofon-Gerät aktualisiert: {input_device}")
                 except Exception as e:
                     logger.error(f"Mikrofon-Kalibrierung Fehler: {e}")
+
+            # Sprach-Feature-Einstellungen live anwenden
+            try:
+                self._jarvis.set_whisper_mode(self._settings.whisper_mode)
+                self._jarvis.set_multi_command(self._settings.multi_command)
+            except Exception as e:
+                logger.error(f"Sprach-Features Fehler: {e}")
 
         autostart = Autostart()
         if self._settings.autostart_enabled:

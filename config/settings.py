@@ -48,6 +48,8 @@ class Settings:
     emotion_detection: bool = False     # Stimmung aus Audio-Features erkennen
     smart_pause: bool = False           # Adaptive Pausen-Erkennung (keine Abschneid-Fehler)
     interrupt_handling: bool = False    # TTS bei Benutzer-Unterbrechung sofort stoppen
+    whisper_mode: bool = True           # Reagiert auf Flüstersprache (leise Stimme)
+    multi_command: bool = False         # Mehrere Befehle in einem Satz verarbeiten
 
     # Wiederholende Tasks — gespeichert als Liste von Dicts:
     # [{id, label, interval_minutes, command}, ...]
