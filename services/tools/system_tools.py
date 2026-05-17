@@ -16,6 +16,7 @@ für saubere Abbruch-Unterstützung durch den TaskManager.
 import logging
 import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -73,6 +74,9 @@ def run_terminal(
     """
     if not command or not command.strip():
         return "Fehler: Leerer Befehl."
+
+    # Timeout auf sicheren Bereich begrenzen (1 s … 120 s)
+    timeout = max(1, min(timeout, 120))
 
     cmd_lower = command.lower()
     for blocked in _BLOCKED_CMDS:
@@ -184,7 +188,6 @@ def run_script(
     suffix = path.suffix.lower()
 
     if suffix == ".py":
-        import sys
         cmd = f'"{sys.executable}" "{path.resolve()}" {args}'.strip()
     elif suffix in (".bat", ".cmd"):
         cmd = f'"{path.resolve()}" {args}'.strip()

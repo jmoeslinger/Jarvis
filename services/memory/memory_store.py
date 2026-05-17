@@ -9,6 +9,7 @@ Filterung:   beim Prompt-Aufbau werden nur zur Kontext-Anfrage passende Einträg
 import difflib
 import json
 import logging
+import shutil
 import threading
 import uuid
 from datetime import datetime
@@ -112,7 +113,6 @@ class MemoryStore:
         """Erstellt beim Start leise ein Backup der memories.json."""
         try:
             if self._file.exists() and self._entries:
-                import shutil
                 shutil.copy2(self._file, _BACKUP_FILE)
         except Exception as e:
             logger.debug(f"Auto-Backup fehlgeschlagen: {e}")
@@ -124,7 +124,6 @@ class MemoryStore:
                 if not self._entries:
                     return "Keine Einträge zum Sichern."
                 count = len(self._entries)
-            import shutil
             # Zeitgestempeltes Backup zusätzlich zum Basis-Backup
             ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
             dest = _BACKUP_FILE.parent / f"memories_{ts}.backup.json"
@@ -141,7 +140,6 @@ class MemoryStore:
         try:
             if not _BACKUP_FILE.exists():
                 return "Kein Backup vorhanden."
-            import shutil
             shutil.copy2(_BACKUP_FILE, self._file)
             with self._lock:
                 self._entries    = self._load()

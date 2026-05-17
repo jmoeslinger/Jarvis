@@ -476,8 +476,20 @@ class GrokClient:
         return prompt
 
     def _trimmed_history(self) -> List[Dict[str, Any]]:
-        """Gibt die letzten N Nachrichten zurück um Token zu sparen."""
-        return self._history[-self._MAX_HISTORY:]
+        """Gibt die letzten N Nachrichten zurück um Token zu sparen.
+
+        Stellt sicher dass kein Schnitt mitten in einer Tool-Call-Sequenz
+        erfolgt: sucht den ersten 'user'-Eintrag im gekürzten Slice und
+        beginnt dort. Ohne diese Prüfung könnte der Slice mit einem
+        'tool'-Ergebnis ohne zugehörige 'assistant'-Anfrage starten, was
+        von der API mit einem 400-Fehler abgelehnt wird.
+        """
+        trimmed = self._history[-self._MAX_HISTORY:]
+        # Ersten user-Eintrag suchen — keine partielle Tool-Sequenz am Anfang
+        for i, msg in enumerate(trimmed):
+            if msg.get("role") == "user":
+                return trimmed[i:]
+        return trimmed
 
     @staticmethod
     def _parse_rate_limit_seconds(err_str: str) -> float:
@@ -505,9 +517,11 @@ class GrokClient:
             secs = re.search(r"(\d+(?:\.\d+)?)s", raw)
             parts = []
             if mins:
-                parts.append(f"{mins.group(1)} Minuten")
+                n = int(mins.group(1))
+                parts.append(f"{n} {'Minute' if n == 1 else 'Minuten'}")
             if secs:
-                parts.append(f"{int(float(secs.group(1)))} Sekunden")
+                n = int(float(secs.group(1)))
+                parts.append(f"{n} {'Sekunde' if n == 1 else 'Sekunden'}")
             return " und ".join(parts) if parts else raw
         return "einigen Minuten"
 
