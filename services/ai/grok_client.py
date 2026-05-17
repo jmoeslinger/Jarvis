@@ -922,7 +922,7 @@ class GrokClient:
 
     def clear_history(self):
         self._history.clear()
-        logger.info("Gespraesverlauf geloescht.")
+        logger.info("Gesprächsverlauf gelöscht.")
 
     @property
     def history(self) -> List[Dict[str, Any]]:

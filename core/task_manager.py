@@ -288,6 +288,9 @@ class TaskManager:
                         entry["timer"].cancel()
                     except Exception:
                         pass
+        # Worker-Thread sauber beenden (max. 2s warten)
+        if self._worker.is_alive():
+            self._worker.join(timeout=2.0)
 
     # ── Interne Worker-Logik ──────────────────────────────────────────────────
 

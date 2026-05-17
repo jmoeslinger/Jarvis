@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 from typing import List, Dict
 
@@ -32,10 +33,18 @@ class WebSearchService:
             return f"Suche fehlgeschlagen: {e}"
 
     def _ddg_search(self, query: str, max_results: int) -> List[Dict]:
-        with DDGS() as ddgs:
-            return list(
-                ddgs.text(query, max_results=max_results, region="de-de")
-            )
+        """Sucht via DuckDuckGo. Timeout nach 10 Sekunden um Haenger zu vermeiden."""
+        def _run():
+            with DDGS() as ddgs:
+                return list(ddgs.text(query, max_results=max_results, region="de-de"))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run)
+            try:
+                return future.result(timeout=10)
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Suche Timeout (10s): '{query}'")
+                return []
 
     def _format_results(self, query: str, results: List[Dict]) -> str:
         lines = [f"Suchergebnisse fuer '{query}':\n"]

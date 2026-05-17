@@ -92,6 +92,7 @@ def main():
         jarvis = JarvisCore(settings)
     except OSError as e:
         logger.critical(f"Mikrofon nicht gefunden: {e}")
+        _remove_pid_file()   # Sicherstellen dass naechster Start nicht blockiert wird
         _show_error(
             "Mikrofon-Fehler",
             f"Kein Mikrofon gefunden:\n{e}\n\nBitte ein Mikrofon anschliessen und Jarvis neu starten.",

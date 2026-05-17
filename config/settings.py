@@ -80,6 +80,18 @@ class Settings:
                             value = bool(value)
                         else:
                             continue
+                    # Numerische Felder: Typ validieren und ggf. konvertieren
+                    # (bool ist Unterklasse von int → explizit ausschließen)
+                    elif isinstance(current, float) and not isinstance(current, bool):
+                        if isinstance(value, (int, float)) and not isinstance(value, bool):
+                            value = float(value)
+                        else:
+                            continue
+                    elif isinstance(current, int) and not isinstance(current, bool):
+                        if isinstance(value, (int, float)) and not isinstance(value, bool):
+                            value = int(value)
+                        else:
+                            continue
                     setattr(self, key, value)
             except (json.JSONDecodeError, OSError):
                 pass
