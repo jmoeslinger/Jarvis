@@ -131,7 +131,7 @@ Jarvis/
 
 | Name | GitHub | Role |
 |------|--------|------|
-| Jakob Moeslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator & Lead Developer |
+| Jakub Möslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator & Lead Developer |
 | Claude (Anthropic) | — | Autonomous debugging (v0.1.10–v0.2.0) |
 
 Full list: [CONTRIBUTORS.md](CONTRIBUTORS.md)
