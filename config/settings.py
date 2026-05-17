@@ -12,7 +12,7 @@ LOG_DIR = CONFIG_DIR / "logs"
 @dataclass
 class Settings:
     grok_api_key: str = ""
-    grok_model: str = "grok-3"
+    grok_model: str = "llama-3.3-70b-versatile"
     tts_voice: str = "de-DE-FlorianMultilingualNeural"
     tts_rate: str = "+0%"
     speech_language: str = "de-DE"

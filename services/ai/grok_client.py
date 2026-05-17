@@ -506,7 +506,7 @@ class GrokClient:
             parts = []
             if mins:
                 parts.append(f"{mins.group(1)} Minuten")
-            if secs and not mins:
+            if secs:
                 parts.append(f"{int(float(secs.group(1)))} Sekunden")
             return " und ".join(parts) if parts else raw
         return "einigen Minuten"
@@ -697,13 +697,14 @@ class GrokClient:
                 self._history.append(tool_entry)
 
             # Finale menschenlesbare Antwort streamen — JETZT on_chunk aufrufen
-            # Kein tool_choice — Modell soll Text antworten, nicht erneut Tools aufrufen
+            # tool_choice="none" + tools=_TOOLS verhindert erneute Tool-Calls
             final_stream = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
+                tools=_TOOLS,
+                tool_choice="none",
                 stream=True,
                 timeout=30,
-                tool_choice="none",
             )
             final_content = ""
             for chunk in final_stream:
@@ -723,14 +724,24 @@ class GrokClient:
             clean = re.sub(r"<function=.*?</function>", "", accumulated_content,
                            flags=re.DOTALL).strip()
             if clean:
-                # Normaler Text — History eintragen und sprechen
-                self._history.append({"role": "assistant", "content": accumulated_content})
-                on_chunk(clean)
+                # Ist clean nur ein Funktionsname (z.B. "get_time" oder "get_time()")?
+                # → würde in History als Assistant-Antwort stehen, ist aber ein Tool-Call.
+                clean_bare = clean.strip().rstrip("()")
+                if clean_bare in self._tools:
+                    logger.warning(
+                        f"Antwort ist nur Funktionsname '{clean_bare}' — versuche Recovery"
+                    )
+                    try:
+                        return self._recover_from_failed_tool(accumulated_content)
+                    except Exception as e:
+                        logger.warning(f"Recovery fehlgeschlagen: {e}")
+                        self._history.append({"role": "assistant", "content": accumulated_content})
+                else:
+                    # Normaler Text — History eintragen und sprechen
+                    self._history.append({"role": "assistant", "content": accumulated_content})
+                    on_chunk(clean)
             # Wenn nur Function-Call-Text übrig war → Recovery versuchen
-            elif "<function=" in accumulated_content or any(
-                f">{name}<" in accumulated_content or accumulated_content.strip() == name
-                for name in self._tools
-            ):
+            elif "<function=" in accumulated_content:
                 # Kein History-Eintrag hier — _recover_from_failed_tool übernimmt das
                 logger.warning("Nur Function-Call-Text ohne tool_call — versuche Recovery")
                 try:
@@ -783,9 +794,9 @@ class GrokClient:
             messages.append({"role": "tool", "tool_call_id": tr["id"], "content": tr["content"]})
             self._history.append({"role": "tool", "tool_call_id": tr["id"], "content": tr["content"]})
 
-        # Finale Antwort ohne Tools — tool_choice="none" verhindert erneute Tool-Calls
+        # Finale Antwort — tool_choice="none" + tools=_TOOLS verhindert erneute Tool-Calls
         response = self._client.chat.completions.create(
-            model=self._model, messages=messages, timeout=20, tool_choice="none",
+            model=self._model, messages=messages, tools=_TOOLS, tool_choice="none", timeout=20,
         )
         content = response.choices[0].message.content or ""
         self._history.append({"role": "assistant", "content": content})
@@ -901,8 +912,9 @@ class GrokClient:
         final = self._client.chat.completions.create(
             model=self._model,
             messages=messages,
-            timeout=30,
+            tools=_TOOLS,
             tool_choice="none",
+            timeout=30,
         )
         content = final.choices[0].message.content or ""
         self._history.append({"role": "assistant", "content": content})

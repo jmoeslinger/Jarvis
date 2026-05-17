@@ -381,7 +381,7 @@ class HUD:
             pass
 
     def _on_message(self, role: str, content: str):
-        if role == "system":
+        if role in ("system", "confidence"):
             return
         # assistant_partial: Live-Update während Streaming, kein Prefix-Cutoff
         if role == "assistant_partial":
