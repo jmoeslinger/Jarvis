@@ -1,61 +1,61 @@
-# 🤖 Jarvis — Dein persönlicher KI-Sprachassistent für Windows
+# Jarvis — Personal AI Voice Assistant for Windows
 
-Jarvis ist ein lokaler Sprachassistent für Windows, den ich in meiner Freizeit entwickelt habe. Er läuft komplett auf deinem PC, hört auf dein Wort und verbindet sich mit modernen KI-Modellen, um dir wirklich zu helfen — nicht nur Schlagwörter zurückzuwerfen.
+Jarvis is a local voice assistant for Windows, built in my free time. It runs entirely on your PC, listens for your commands, and connects to modern AI models to actually help you — not just throw keywords back at you.
 
-Die Idee war simpel: Ich wollte einen Assistenten, der sich anfühlt wie aus einem Sci-Fi-Film, aber tatsächlich funktioniert und meinen Alltag am PC erleichtert.
-
----
-
-## ✨ Was kann Jarvis?
-
-- **Sprachsteuerung** — sprich einfach, Jarvis hört zu (Wake-Word „Hey Jarvis" oder Hotkey)
-- **KI-Antworten** — verbunden mit Groq (Llama 3.3, schnell & kostenlos) oder lokal via Ollama
-- **Apps öffnen & schließen** — „Öffne Spotify", „Schließ Chrome"
-- **Uhrzeit & Datum** — „Wie spät ist es?"
-- **Internet-Suche** — aktuelle Infos, Wetter, Nachrichten
-- **YouTube & Browser** — „Spiel Lo-Fi Hip Hop auf YouTube"
-- **Timer setzen** — „Stell einen Timer auf 10 Minuten"
-- **Dateien lesen & schreiben** — Notizen diktieren, Dateien vorlesen lassen
-- **Terminal-Befehle** — Windows-Befehle per Sprache ausführen
-- **Zwischenablage lesen** — „Was hab ich kopiert?"
-- **Bildschirm analysieren** — „Was siehst du auf meinem Bildschirm?"
-- **Gedächtnis** — Jarvis merkt sich Infos über dich dauerhaft
-- **Emotionserkennung** — reagiert auf deine Stimmung in der Stimme
-- **Sprechererkennung** — erkennt nur deine Stimme (optional)
-- **Lokales Wake-Word** — „Hey Jarvis" offline, kein Internet nötig
-- **Wiederkehrende Aufgaben** — automatisierte Erinnerungen & Tasks
-- **Task-Queue** — mehrere Aufgaben nacheinander abarbeiten
+The idea was simple: I wanted an assistant that feels like something out of a sci-fi film, but actually works and makes daily PC use easier.
 
 ---
 
-## 🖥️ Voraussetzungen
+## What can Jarvis do?
+
+- **Voice control** — just speak, Jarvis listens (wake word "Hey Jarvis" or hotkey)
+- **AI responses** — powered by Groq (Llama 3.3, fast & free) or locally via Ollama
+- **Open & close apps** — "Open Spotify", "Close Chrome"
+- **Time & date** — "What time is it?"
+- **Web search** — current info, weather, news
+- **YouTube & browser** — "Play Lo-Fi Hip Hop on YouTube"
+- **Set timers** — "Set a timer for 10 minutes"
+- **Read & write files** — dictate notes, have files read aloud
+- **Terminal commands** — run Windows commands by voice
+- **Read clipboard** — "What did I copy?"
+- **Screen analysis** — "What do you see on my screen?"
+- **Memory** — Jarvis permanently remembers information about you
+- **Emotion detection** — responds to your mood in your voice
+- **Speaker recognition** — only reacts to your voice (optional)
+- **Local wake word** — "Hey Jarvis" offline, no internet required
+- **Recurring tasks** — automated reminders and scheduled commands
+- **Task queue** — process multiple commands one after another
+
+---
+
+## Requirements
 
 - Windows 10 / 11
-- Python 3.10 oder neuer
-- Ein Mikrofon
-- Einen kostenlosen [Groq API-Key](https://console.groq.com) (für die KI-Antworten)
-- Optional: [Ollama](https://ollama.ai) für vollständig lokale KI ohne Internet
+- Python 3.10 or newer
+- A microphone
+- A free [Groq API key](https://console.groq.com) (for AI responses)
+- Optional: [Ollama](https://ollama.ai) for fully local AI without internet
 
 ---
 
-## 🚀 Installation
+## Installation
 
-### 1. Repository klonen
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/jmoeslinger/Jarvis.git
 cd Jarvis
 ```
 
-### 2. Abhängigkeiten installieren
+### 2. Install dependencies
 
-Einfach die mitgelieferte Batch-Datei doppelklicken:
+Double-click the included batch file:
 
 ```
 requirements installieren.bat
 ```
 
-Oder manuell:
+Or manually:
 
 ```bash
 python -m venv venv
@@ -63,97 +63,97 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Starten & einrichten
+### 3. Start and set up
 
 ```
 Jarvis starten.bat
 ```
 
-Beim ersten Start öffnet sich ein Einrichtungsdialog. Dort trägst du deinen Groq API-Key ein (kostenlos unter [console.groq.com](https://console.groq.com) registrieren — dauert 2 Minuten).
+On first launch a setup dialog opens. Enter your Groq API key there (register for free at [console.groq.com](https://console.groq.com) — takes 2 minutes).
 
-### 4. Benutzen
+### 4. Use it
 
-- Drücke **H+Strg** oder sag **„Hey Jarvis"** → Jarvis hört zu
-- Sag deinen Befehl
-- Fertig
+- Press **Ctrl+Shift+J** or say **"Hey Jarvis"** -> Jarvis listens
+- Say your command
+- Done
 
 ---
 
-## ⚙️ Optionale Features
+## Optional Features
 
-| Feature | Zusätzliches Paket | Befehl |
+| Feature | Additional package | Command |
 |---|---|---|
-| Lokales Wake-Word (offline) | `openwakeword` + `onnxruntime` | `pip install openwakeword onnxruntime` |
-| Sprechererkennung | `resemblyzer` | `pip install resemblyzer` |
-| Lokale KI (kein Internet) | Ollama | [ollama.ai](https://ollama.ai) herunterladen |
+| Local wake word (offline) | `openwakeword` + `onnxruntime` | `pip install openwakeword onnxruntime` |
+| Speaker recognition | `resemblyzer` | `pip install resemblyzer` |
+| Local AI (no internet) | Ollama | Download at [ollama.ai](https://ollama.ai) |
 
 ---
 
-## 📁 Projektstruktur
+## Project Structure
 
 ```
 Jarvis/
-├── main.py                  # Einstiegspunkt
-├── config/                  # Einstellungen
-├── core/                    # Kernlogik (jarvis.py, task_manager.py)
+├── main.py                  # Entry point
+├── config/                  # Settings
+├── core/                    # Core logic (jarvis.py, task_manager.py)
 ├── services/
-│   ├── ai/                  # KI-Clients (Groq, Ollama, Router)
-│   ├── speech/              # Spracherkennung, TTS, Emotionen, Speaker-ID
-│   ├── tools/               # System-Tools (Terminal, Dateien, Screenshot)
-│   ├── web/                 # Suche, Browser-Steuerung
-│   └── system/              # App-Launcher, Hotkeys, Autostart
-├── ui/                      # Benutzeroberfläche (HUD, Control Panel, Chat)
+│   ├── ai/                  # AI clients (Groq, Ollama, Router)
+│   ├── speech/              # Speech recognition, TTS, emotions, speaker ID
+│   ├── tools/               # System tools (terminal, files, screenshot)
+│   ├── web/                 # Search, browser control
+│   └── system/              # App launcher, hotkeys, autostart
+├── ui/                      # User interface (HUD, control panel, chat)
 └── requirements.txt
 ```
 
 ---
 
-## 🔑 API-Keys & Datenschutz
+## API Keys & Privacy
 
-- Dein **Groq API-Key** wird lokal in `%APPDATA%\Jarvis\settings.json` gespeichert und nirgendwo hochgeladen
-- Sprachaufnahmen werden **direkt** an die Groq-API (Whisper) zur Transkription gesendet — nur wenn du sprichst
-- Jarvis selbst sammelt **keine** Nutzungsdaten, sendet **keine** Telemetrie
-- Das Gedächtnis (Memories) liegt lokal unter `%APPDATA%\Jarvis\memories.json`
-- Wenn du Groq nicht nutzen möchtest: Ollama als vollständig lokale Alternative einrichten
-
----
-
-## 🐛 Bekannte Einschränkungen
-
-- Manche Sprachbefehle werden vom Modell falsch verstanden — am besten klar und deutlich sprechen
-- Das Wake-Word „Hey Jarvis" funktioniert am besten in ruhiger Umgebung
-- Für lokales Wake-Word muss `openwakeword` separat installiert werden
-- Jarvis benötigt unter Umständen Admin-Rechte für bestimmte Terminal-Befehle
+- Your **Groq API key** is stored locally in `%APPDATA%\Jarvis\settings.json` and never uploaded anywhere
+- Voice recordings are sent **directly** to the Groq API (Whisper) for transcription — only when you speak
+- Jarvis itself collects **no** usage data and sends **no** telemetry
+- Memory (Memories) is stored locally at `%APPDATA%\Jarvis\memories.json`
+- If you don't want to use Groq: set up Ollama as a fully local alternative
 
 ---
 
-## 📜 Lizenz & Rechtliches
+## Known Limitations
 
-Dieses Projekt steht unter der **MIT-Lizenz** — du darfst es frei verwenden, teilen, verändern und in eigenen Projekten einsetzen. Details in [LICENSE](LICENSE).
-
-Durch die Nutzung von Jarvis stimmst du den [Nutzungsbedingungen](TERMS.md) zu.
-
----
-
-## 👥 Contributors
-
-| Name | GitHub | Rolle |
-|------|--------|-------|
-| Jakob Moeslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator & Hauptentwickler |
-| Claude (Anthropic) | — | Autonomes Debugging (v0.1.10–v0.2.0) |
-
-Vollständige Liste: [CONTRIBUTORS.md](CONTRIBUTORS.md)
+- Some voice commands may be misunderstood by the model — speak clearly and directly
+- The wake word "Hey Jarvis" works best in a quiet environment
+- Local wake word requires `openwakeword` to be installed separately
+- Jarvis may require admin rights for certain terminal commands
 
 ---
 
-## 🙏 Danke an
+## Contributors
 
-- [Groq](https://groq.com) — blitzschnelle LLM-Inferenz, kostenlos
-- [OpenWakeWord](https://github.com/dscripka/openWakeWord) — lokale Wake-Word-Erkennung
-- [Resemblyzer](https://github.com/resemble-ai/Resemblyzer) — Sprechererkennung
-- [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modernes GUI
-- [edge-tts](https://github.com/rany2/edge-tts) — natürliche Sprachausgabe
+| Name | GitHub | Role |
+|------|--------|------|
+| Jakob Moeslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator & Lead Developer |
+| Claude (Anthropic) | — | Autonomous debugging (v0.1.10–v0.2.0) |
+
+Full list: [CONTRIBUTORS.md](CONTRIBUTORS.md)
 
 ---
 
-*Version v0.2.0 — gebaut mit zu viel Kaffee und zu wenig Schlaf* ☕
+## License & Legal
+
+This project is licensed under the **MIT License** — you are free to use, share, modify and incorporate it into your own projects. See [LICENSE](LICENSE) for details.
+
+By using Jarvis you agree to the [Terms of Use](TERMS.md).
+
+---
+
+## Acknowledgements
+
+- [Groq](https://groq.com) — lightning-fast LLM inference, free
+- [OpenWakeWord](https://github.com/dscripka/openWakeWord) — local wake word detection
+- [Resemblyzer](https://github.com/resemble-ai/Resemblyzer) — speaker recognition
+- [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern GUI
+- [edge-tts](https://github.com/rany2/edge-tts) — natural text-to-speech
+
+---
+
+*Version v0.2.0 — built with too much coffee and too little sleep*
