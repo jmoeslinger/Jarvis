@@ -1018,10 +1018,15 @@ class JarvisCore:
         return False
 
     def _extract_inline_command(self, text: str) -> Optional[str]:
-        """Extrahiert den Befehl nach dem Wake-Word im selben Satz."""
+        """Extrahiert den Befehl nach dem Wake-Word im selben Satz.
+        Vergleich ist case-insensitiv: Wake-Words werden lowercase gespeichert,
+        aber STT-Ausgabe bewahrt Originalschreibweise (z. B. 'Hey Jarvis').
+        """
+        text_lower = text.lower()
         for ww in sorted(self.settings.wake_words, key=len, reverse=True):
-            if ww in text:
-                after = text[text.find(ww) + len(ww):]
+            if ww in text_lower:
+                pos   = text_lower.find(ww)
+                after = text[pos + len(ww):]
                 command = after.lstrip(" ,;:.").strip()
                 if len(command) > 2:
                     return command
