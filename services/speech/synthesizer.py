@@ -18,27 +18,40 @@ _SENTENCE_RE = re.compile(r'(?<=[.!?])\s+')
 
 
 class SentencePipeline:
-    """Streaming TTS-Pipeline: nimmt Text-Chunks an, synthetisiert und spielt satzweise ab."""
+    """Streaming TTS-Pipeline: nimmt Text-Chunks an, synthetisiert und spielt satzweise ab.
+
+    Architektur: zwei Queues, zwei dedizierte Threads.
+      _synth_queue  → _synth_thread  → _audio_queue  → _player_thread → Lautsprecher
+
+    Die Synthese läuft SEQUENZIELL (ein Satz nach dem anderen), weil parallele
+    Synth-Threads die Sätze in zufälliger Reihenfolge in die Audio-Queue einreihen
+    würden — kürzere Sätze kämen vor längeren an und würden falsch abgespielt.
+    Da edge-tts deutlich schneller ist als die Echtzeit-Wiedergabe, entsteht
+    durch die sequenzielle Synthese keine hörbare Lücke zwischen den Sätzen.
+    """
 
     def __init__(self, synthesizer: "SpeechSynthesizer"):
         self._synth = synthesizer
         self._buffer = ""
-        self._audio_queue: queue.Queue = queue.Queue()
+        self._synth_queue: queue.Queue = queue.Queue()   # Sätze → Synth-Thread
+        self._audio_queue: queue.Queue = queue.Queue()   # fertige Audio → Player-Thread
         self._stopped = False
         self._done = threading.Event()
 
-        # Player-Thread liest fertige Audio-Daten aus der Queue
+        # Synth-Thread: verarbeitet Sätze sequenziell, erhält Reihenfolge
+        self._synth_thread = threading.Thread(
+            target=self._synth_loop, daemon=True, name="tts-synth"
+        )
+        self._synth_thread.start()
+
+        # Player-Thread: spielt fertige Audio-Daten in Ankunftsreihenfolge ab
         self._player_thread = threading.Thread(
             target=self._player_loop, daemon=True, name="tts-player"
         )
         self._player_thread.start()
 
-        # Zählt laufende Synth-Threads
-        self._pending = 0
-        self._pending_lock = threading.Lock()
-
     def feed(self, chunk: str):
-        """Empfängt einen neuen Text-Chunk und synthetisiert abgeschlossene Sätze."""
+        """Empfängt einen neuen Text-Chunk und reiht abgeschlossene Sätze ein."""
         if self._stopped:
             return
         self._buffer += chunk
@@ -50,28 +63,27 @@ class SentencePipeline:
             for sentence in complete_sentences:
                 sentence = sentence.strip()
                 if sentence:
-                    self._schedule_synth(sentence)
+                    self._synth_queue.put(sentence)
 
     def finish(self):
         """Flusht verbleibenden Puffer und wartet bis alles abgespielt wurde."""
-        # Restlichen Text synthetisieren
         remaining = self._buffer.strip()
         if remaining and not self._stopped:
-            self._schedule_synth(remaining)
+            self._synth_queue.put(remaining)
         self._buffer = ""
 
-        # Warten bis alle Synth-Threads fertig sind
-        self._wait_pending()
-
-        # Sentinel in Queue → Player-Thread beendet sich
-        if not self._stopped:
-            self._audio_queue.put(None)
+        # Sentinel → Synth-Thread beendet sich nach Abarbeitung aller Sätze
+        self._synth_queue.put(None)
+        # Warten bis Synth-Thread fertig ist (er schickt dann Sentinel an Player)
+        self._synth_thread.join(timeout=60)
         self._done.wait(timeout=30)
 
     def stop(self):
         """Bricht alles sofort ab."""
         self._stopped = True
-        # Leere die Queue
+        # Synth-Thread aufwecken und beenden
+        self._synth_queue.put(None)
+        # Audio-Queue leeren
         while not self._audio_queue.empty():
             try:
                 self._audio_queue.get_nowait()
@@ -89,38 +101,33 @@ class SentencePipeline:
     # Interne Methoden
     # ------------------------------------------------------------------
 
-    def _schedule_synth(self, sentence: str):
-        """Startet einen Background-Thread der den Satz synthetisiert."""
-        with self._pending_lock:
-            self._pending += 1
-
-        def _run():
+    def _synth_loop(self):
+        """Sequenzieller Synthese-Thread: verarbeitet Sätze in Reihenfolge."""
+        while True:
             try:
+                sentence = self._synth_queue.get(timeout=60)
+            except queue.Empty:
+                break
+
+            if sentence is None:
+                # Sentinel — alle Sätze verarbeitet
+                break
+
+            if self._stopped:
+                continue   # Queue leeren, aber nichts mehr synthetisieren
+
+            try:
+                audio = self._synth._prepare_edge_tts(sentence)
                 if not self._stopped:
-                    audio = self._synth._prepare_edge_tts(sentence)
-                    if not self._stopped:
-                        self._audio_queue.put(audio)
+                    self._audio_queue.put(audio)
             except Exception as e:
                 logger.warning(f"SentencePipeline Synth-Fehler: {e}")
-                # Fallback: Text merken für pyttsx3
                 if not self._stopped:
                     self._audio_queue.put(("fallback", sentence))
-            finally:
-                with self._pending_lock:
-                    self._pending -= 1
 
-        threading.Thread(target=_run, daemon=True, name="tts-synth").start()
-
-    def _wait_pending(self):
-        """Wartet bis alle Synth-Threads abgeschlossen sind."""
-        import time
-        while True:
-            if self._stopped:
-                break
-            with self._pending_lock:
-                if self._pending == 0:
-                    break
-            time.sleep(0.05)
+        # Synth-Thread fertig → Sentinel an Player-Thread schicken
+        if not self._stopped:
+            self._audio_queue.put(None)
 
     def _player_loop(self):
         """Spielt Audio-Daten der Reihe nach ab."""
