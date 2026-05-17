@@ -145,4 +145,4 @@ Durch die Nutzung von Jarvis stimmst du den [Nutzungsbedingungen](TERMS.md) zu.
 
 ---
 
-*Version v0.1.9 — gebaut mit zu viel Kaffee und zu wenig Schlaf* ☕
+*Version v0.1.10 — gebaut mit zu viel Kaffee und zu wenig Schlaf* ☕

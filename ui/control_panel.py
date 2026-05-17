@@ -24,12 +24,6 @@ _STATE_INFO = {
     "error":          ("#ef4444", "Fehler"),
 }
 
-_MODES = [
-    ("🔄  Auto",    "auto"),
-    ("☁️  Online",  "online"),
-    ("💻  Lokal",   "local"),
-]
-
 _MODE_LABELS = {
     "auto":   "🔄 Auto",
     "online": "☁️ Online",
@@ -72,7 +66,6 @@ class ControlPanel:
         self._task_lbl_current: Optional[ctk.CTkLabel] = None
         self._task_progress: Optional[ctk.CTkProgressBar] = None
         self._task_lbl_queue: Optional[ctk.CTkLabel] = None
-        self._task_lbl_status: Optional[ctk.CTkLabel] = None
 
         # Automatisierung Widgets
         self._recurring_frame: Optional[ctk.CTkScrollableFrame] = None

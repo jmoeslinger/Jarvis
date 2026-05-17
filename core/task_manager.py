@@ -378,8 +378,10 @@ class TaskManager:
                 e["func"], e["args"], e["kwargs"],
                 e["priority"], e["label"],
             )
-            # Nächsten Lauf aktualisieren & neu planen
-            e["next_run"] = time.monotonic() + e["interval"]
+            # Nächsten Lauf aktualisieren (unter Lock — list_recurring() liest next_run ebenfalls unter Lock)
+            with self._recurring_lock:
+                if rid in self._recurring:
+                    self._recurring[rid]["next_run"] = time.monotonic() + e["interval"]
             self._schedule_recurring(rid)
 
         timer = threading.Timer(entry["interval"], _fire)
