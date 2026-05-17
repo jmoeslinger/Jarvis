@@ -716,8 +716,6 @@ class JarvisCore:
         command wird per send_text_command() ausgeführt.
         Gibt eine ID zurück (zum späteren Entfernen).
         """
-        import uuid
-        rid = uuid.uuid4().hex[:8]
         interval_s = interval_minutes * 60
 
         def _recurring_func(cancel_event=None):

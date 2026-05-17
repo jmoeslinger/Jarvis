@@ -1,7 +1,7 @@
 # Nutzungsbedingungen — Jarvis
 
 **Letzte Aktualisierung:** Mai 2026  
-**Version:** v0.1.15
+**Version:** v0.1.16
 
 Bitte lies diese Nutzungsbedingungen durch, bevor du Jarvis verwendest. Durch die Installation oder Nutzung von Jarvis erklärst du dich mit diesen Bedingungen einverstanden.
 

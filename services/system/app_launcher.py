@@ -2,6 +2,7 @@ import difflib
 import logging
 import shutil
 import subprocess
+import time
 import winreg
 from pathlib import Path
 from typing import Optional
@@ -218,7 +219,7 @@ class AppLauncher:
 
         # Prozesse die nicht reagiert haben nach kurzer Wartezeit hart killen
         if killed:
-            import time; time.sleep(1)
+            time.sleep(1)
             for proc in psutil.process_iter(["name"]):
                 try:
                     if proc.info["name"] and proc.info["name"].lower() in targets:
