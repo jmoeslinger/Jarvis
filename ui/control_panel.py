@@ -53,6 +53,7 @@ class ControlPanel:
         # Sub-Windows
         self._memory_proc: Optional[subprocess.Popen] = None
         self._chat_thread: Optional[threading.Thread] = None
+        self._chat_window = None   # Referenz auf aktives ChatWindow (für erneutes Öffnen)
         self._settings_open = False
         self._enroll_running = False
 
@@ -618,6 +619,12 @@ class ControlPanel:
 
     def _act_chat(self):
         if self._chat_thread and self._chat_thread.is_alive():
+            # Thread läuft noch — Fenster war evtl. nur minimiert → wieder zeigen
+            if self._chat_window:
+                try:
+                    self._chat_window.show()
+                except Exception:
+                    pass
             return
         self._chat_thread = threading.Thread(target=self._run_chat, daemon=True)
         self._chat_thread.start()
@@ -625,9 +632,12 @@ class ControlPanel:
     def _run_chat(self):
         try:
             from ui.chat_window import ChatWindow
-            ChatWindow(self._jarvis).run()
+            self._chat_window = ChatWindow(self._jarvis)
+            self._chat_window.run()
         except Exception as e:
             logger.error(f"Chat: {e}")
+        finally:
+            self._chat_window = None
 
     def _act_hud(self):
         if self._hud and self._hud.is_alive():

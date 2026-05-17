@@ -246,9 +246,13 @@ class ChatWindow:
             return
         color = _STATUS_COLOR.get(state, "#555566")
         text  = _STATUS_TEXT.get(state, "Jarvis")
-        self._root.after(0, lambda: self._status_lbl.configure(
-            text=text, text_color=color
-        ))
+        def _apply(t=text, c=color):
+            try:
+                if self._status_lbl and self._status_lbl.winfo_exists():
+                    self._status_lbl.configure(text=t, text_color=c)
+            except Exception:
+                pass
+        self._root.after(0, _apply)
 
     def _on_message(self, role: str, content: str):
         if not self.is_alive():
@@ -257,35 +261,44 @@ class ChatWindow:
 
     def _handle_message(self, role: str, content: str):
         """Wird im Tkinter-Haupt-Thread ausgeführt."""
-        if role == "assistant_partial":
-            # Streaming: letzte Bubble aktualisieren statt neue zu erstellen
-            if self._partial_label:
-                preview = content[:400] + ("..." if len(content) > 400 else "")
-                self._partial_label.configure(text=preview)
-            else:
-                # Erste Partial-Nachricht → neue Bubble anlegen
-                self._partial_bubble, self._partial_label = self._add_bubble(
-                    "assistant", content[:400], streaming=True
-                )
-            self._scroll_to_bottom()
+        # Interne Rollen die nicht im Chat angezeigt werden sollen
+        if role in ("confidence",):
             return
 
-        if role == "assistant":
-            # Finale Antwort: Partial-Bubble updaten oder neue anlegen
-            if self._partial_label:
-                self._partial_label.configure(text=content)
-                self._partial_bubble  = None
-                self._partial_label   = None
-            else:
-                self._add_bubble("assistant", content)
-            self._scroll_to_bottom()
-            return
+        try:
+            if role == "assistant_partial":
+                # Streaming: letzte Bubble aktualisieren statt neue zu erstellen
+                if self._partial_label and self._partial_label.winfo_exists():
+                    preview = content[:400] + ("..." if len(content) > 400 else "")
+                    self._partial_label.configure(text=preview)
+                else:
+                    # Erste Partial-Nachricht → neue Bubble anlegen
+                    self._partial_bubble, self._partial_label = self._add_bubble(
+                        "assistant", content[:400], streaming=True
+                    )
+                self._scroll_to_bottom()
+                return
 
-        # user / system: Streaming-Bubble abschließen, neue anlegen
-        self._partial_bubble = None
-        self._partial_label  = None
-        self._add_bubble(role, content)
-        self._scroll_to_bottom()
+            if role == "assistant":
+                # Finale Antwort: Partial-Bubble updaten oder neue anlegen
+                if self._partial_label and self._partial_label.winfo_exists():
+                    self._partial_label.configure(text=content)
+                    self._partial_bubble  = None
+                    self._partial_label   = None
+                else:
+                    self._partial_bubble = None
+                    self._partial_label  = None
+                    self._add_bubble("assistant", content)
+                self._scroll_to_bottom()
+                return
+
+            # user / system: Streaming-Bubble abschließen, neue anlegen
+            self._partial_bubble = None
+            self._partial_label  = None
+            self._add_bubble(role, content)
+            self._scroll_to_bottom()
+        except Exception as e:
+            logger.debug(f"_handle_message Fehler (Fenster ggf. geschlossen): {e}")
 
     def _add_bubble(self, role: str, content: str, streaming: bool = False):
         """Erstellt eine neue Nachrichtenblase. Gibt (bubble, label) zurück wenn streaming=True."""
@@ -314,4 +327,9 @@ class ChatWindow:
         self._jarvis.send_text_command(text)
 
     def _on_close(self):
-        self._root.withdraw()
+        # destroy() beendet die mainloop → Thread kann neu gestartet werden
+        # withdraw() würde den Thread am Leben lassen und erneutes Öffnen verhindern
+        try:
+            self._root.destroy()
+        except Exception:
+            pass

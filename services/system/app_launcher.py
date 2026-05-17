@@ -204,8 +204,8 @@ class AppLauncher:
             if close:
                 targets = _PROCESS_NAMES[close[0]]
 
-        # Immer auch den normalisierten Namen selbst versuchen
-        targets = list({t.lower() for t in targets} | {normalized + ".exe"})
+        # Immer auch den normalisierten Namen selbst versuchen — als Set für O(1) Lookup
+        targets: set = {t.lower() for t in targets} | {normalized + ".exe"}
 
         killed: list[str] = []
         for proc in psutil.process_iter(["name", "pid"]):

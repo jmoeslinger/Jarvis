@@ -79,6 +79,12 @@ class TrayIcon:
     def _cmd_quit(self, icon=None, item=None):
         logger.info("Jarvis wird beendet...")
         self._jarvis.stop()
+        # HUD (Tkinter-Hauptfenster) schließen damit der Haupt-Thread beendet wird
+        if self._hud and hasattr(self._hud, "_root") and self._hud._root:
+            try:
+                self._hud._root.after(0, self._hud._root.destroy)
+            except Exception:
+                pass
         if self._icon:
             self._icon.stop()
 
