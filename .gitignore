@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Jarvis — persönliche Daten (NIEMALS committen!)
+Einstellungen.bat
+debug_output.txt
+debug_mic.py
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Jarvis AppData (lokal, nicht im Repo)
+# settings.json liegt in %APPDATA%\Jarvis\ — nicht hier
