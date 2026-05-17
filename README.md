@@ -135,6 +135,17 @@ Durch die Nutzung von Jarvis stimmst du den [Nutzungsbedingungen](TERMS.md) zu.
 
 ---
 
+## 👥 Contributors
+
+| Name | GitHub | Rolle |
+|------|--------|-------|
+| Jakob Moeslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator & Hauptentwickler |
+| Claude (Anthropic) | — | Autonomes Debugging (v0.1.10–v0.2.0) |
+
+Vollständige Liste: [CONTRIBUTORS.md](CONTRIBUTORS.md)
+
+---
+
 ## 🙏 Danke an
 
 - [Groq](https://groq.com) — blitzschnelle LLM-Inferenz, kostenlos
@@ -145,4 +156,4 @@ Durch die Nutzung von Jarvis stimmst du den [Nutzungsbedingungen](TERMS.md) zu.
 
 ---
 
-*Version v0.1.16 — gebaut mit zu viel Kaffee und zu wenig Schlaf* ☕
+*Version v0.2.0 — gebaut mit zu viel Kaffee und zu wenig Schlaf* ☕
