@@ -19,12 +19,11 @@ class Autostart:
 
     def enable(self) -> bool:
         try:
-            key = winreg.OpenKey(
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, _REG_PATH, 0, winreg.KEY_SET_VALUE
-            )
-            cmd = self._get_command()
-            winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, cmd)
-            winreg.CloseKey(key)
+            ) as key:
+                cmd = self._get_command()
+                winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, cmd)
             logger.info(f"Autostart aktiviert: {cmd}")
             return True
         except OSError as e:
@@ -33,26 +32,24 @@ class Autostart:
 
     def disable(self) -> bool:
         try:
-            key = winreg.OpenKey(
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, _REG_PATH, 0, winreg.KEY_SET_VALUE
-            )
-            winreg.DeleteValue(key, _APP_NAME)
-            winreg.CloseKey(key)
+            ) as key:
+                winreg.DeleteValue(key, _APP_NAME)
             logger.info("Autostart deaktiviert.")
             return True
         except FileNotFoundError:
-            return True
+            return True  # Eintrag existierte ohnehin nicht
         except OSError as e:
             logger.error(f"Autostart-Deaktivierung fehlgeschlagen: {e}")
             return False
 
     def is_enabled(self) -> bool:
         try:
-            key = winreg.OpenKey(
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, _REG_PATH, 0, winreg.KEY_READ
-            )
-            winreg.QueryValueEx(key, _APP_NAME)
-            winreg.CloseKey(key)
+            ) as key:
+                winreg.QueryValueEx(key, _APP_NAME)
             return True
         except (FileNotFoundError, OSError):
             return False

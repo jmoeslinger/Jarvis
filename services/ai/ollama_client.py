@@ -75,6 +75,11 @@ class OllamaClient(GrokClient):
                 "\n\nAUFGABEN-PLANUNG: Erstelle bei komplexen Aufgaben zuerst einen Plan, "
                 "dann führe ihn aus."
             )
+        if self._parallel_tasks:
+            prompt += (
+                "\n\nPARALLEL-MODUS: Wenn mehrere unabhängige Aufgaben genannt werden, "
+                "erkenne alle und rufe die nötigen Tools auf."
+            )
         if self._get_memories:
             mem = self._get_memories(self._current_query)
             if mem:

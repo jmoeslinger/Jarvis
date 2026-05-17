@@ -434,7 +434,6 @@ class HUD:
 
     def _on_clear_history_click(self):
         """Gesprächsverlauf löschen — mit 2s Debounce."""
-        import time
         now = time.monotonic()
         if now - self._last_clear_ts < 2.0:
             return
