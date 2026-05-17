@@ -664,7 +664,7 @@ class GrokClient:
                         try:
                             stream_results[tc_id] = str(self._tools[n](**a)) \
                                 if n in self._tools else f"Unbekanntes Tool: '{n}'"
-                        except BaseException as e:
+                        except Exception as e:
                             stream_results[tc_id] = f"Tool-Fehler: {e}"
 
                     t = threading.Thread(target=_run, daemon=True)
@@ -875,7 +875,7 @@ class GrokClient:
                     try:
                         tool_results[tc_id] = str(self._tools[n](**a)) if n in self._tools \
                             else f"Unbekanntes Tool: '{n}'"
-                    except BaseException as e:
+                    except Exception as e:
                         tool_results[tc_id] = f"Tool-Fehler: {e}"
 
                 t = threading.Thread(target=_run, daemon=True)
