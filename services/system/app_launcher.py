@@ -383,9 +383,8 @@ def _registry_lookup(exe_name: str) -> Optional[str]:
     for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
         for base in bases:
             try:
-                key = winreg.OpenKey(root, base + sep + exe_name)
-                path, _ = winreg.QueryValueEx(key, "")
-                winreg.CloseKey(key)
+                with winreg.OpenKey(root, base + sep + exe_name) as key:
+                    path, _ = winreg.QueryValueEx(key, "")
                 if path and Path(path).exists():
                     return path
             except OSError:
