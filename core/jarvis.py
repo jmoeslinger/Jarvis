@@ -1,7 +1,9 @@
 import datetime
 import difflib
 import logging
+import re
 import threading
+import time
 import webbrowser
 from enum import Enum, auto
 from pathlib import Path
@@ -441,8 +443,7 @@ class JarvisCore:
 
         self._notify("system", f"🎙 Aufnahme startet ({duration_s:.0f}s) — bitte sprechen …")
         # Kurz warten damit TTS-Ansage abgespielt werden kann
-        import time as _time
-        _time.sleep(0.5)
+        time.sleep(0.5)
 
         # Aufnahme via Recognizer (max_duration = duration_s)
         audio = self.recognizer._record(
@@ -515,8 +516,7 @@ class JarvisCore:
 
         try:
             # Kurze Anlaufverzögerung → TTS hat Zeit zu starten
-            import time as _t
-            _t.sleep(0.4)
+            time.sleep(0.4)
 
             with sd.InputStream(
                 samplerate=_MONITOR_SR,
@@ -555,7 +555,6 @@ class JarvisCore:
 
     def _handle_interrupt(self):
         """Reagiert auf eine Benutzer-Unterbrechung: TTS stoppen + Befehl aufnehmen."""
-        import time as _t
         self.synthesizer.stop()
         self._notify("system", "✋ Unterbrochen")
         self._interrupt_active.clear()
@@ -563,7 +562,7 @@ class JarvisCore:
         if not self._running:
             return
 
-        _t.sleep(0.15)   # kurze Pause damit Mikrofon-Echo abklingt
+        time.sleep(0.15)   # kurze Pause damit Mikrofon-Echo abklingt
         self._set_state(State.CMD_LISTENING)
         self._cmd_stop_event.clear()
 
@@ -682,7 +681,6 @@ class JarvisCore:
         Wartet falls Jarvis durch die Sprach-Aktivierung beschäftigt ist.
         """
         # Kurz warten wenn Voice-Flow gerade aktiv ist (max. 30s)
-        import time as _time
         wait_s = 0.0
         while self.state in (State.PROCESSING, State.SPEAKING, State.CMD_LISTENING):
             if cancel_event and cancel_event.is_set():
@@ -690,7 +688,7 @@ class JarvisCore:
             if wait_s > 30:
                 self._notify("system", "⚠ Task-Timeout: Jarvis war zu lange beschäftigt.")
                 return
-            _time.sleep(0.2)
+            time.sleep(0.2)
             wait_s += 0.2
 
         was_listening = self.state == State.WAKE_LISTENING
@@ -1174,9 +1172,8 @@ class JarvisCore:
                 self.synthesizer._speaking = False
 
             # Finale Nachricht: Function-Call-XML aus der Anzeige entfernen
-            import re as _re
-            clean_response = _re.sub(r"<function=.*?</function>", "", full_response,
-                                     flags=_re.DOTALL).strip()
+            clean_response = re.sub(r"<function=.*?</function>", "", full_response,
+                                    flags=re.DOTALL).strip()
             self._notify("assistant", clean_response or full_response)
 
             # Konfidenz-Score berechnen und broadcasten
@@ -1285,7 +1282,9 @@ class JarvisCore:
 
         mins = seconds // 60
         secs = seconds % 60
-        time_str = f"{mins} Minuten {secs} Sekunden" if mins else f"{secs} Sekunden"
+        min_str = f"{mins} {'Minute' if mins == 1 else 'Minuten'}"
+        sec_str = f"{secs} {'Sekunde' if secs == 1 else 'Sekunden'}"
+        time_str = f"{min_str} {sec_str}" if mins else sec_str
         return f"Timer gesetzt: {label} in {time_str}."
 
     def _tool_remember(self, info: str) -> str:
