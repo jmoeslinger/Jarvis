@@ -67,7 +67,9 @@ class VisionAnalyzer:
             try:
                 result = self._analyze_groq(image_b64, question)
                 if result and result.strip():
-                    logger.info("Vision: Groq Llama-3.2 verwendet.")
+                    # BUG-076: log said "Llama-3.2" unconditionally; actual model is
+                    # logged inside _analyze_groq() — keep outer message generic.
+                    logger.info("Vision: Groq provider used.")
                     return result
             except Exception as e:
                 logger.warning(f"Groq Vision Fehler: {e}")

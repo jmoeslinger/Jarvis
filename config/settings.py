@@ -125,6 +125,14 @@ class Settings:
                         continue   # Listenfeld bleibt beim Default
                     if isinstance(current, dict) and not isinstance(value, dict):
                         continue   # Dictfeld bleibt beim Default
+                    # BUG-077: For dict fields, merge loaded value INTO the current
+                    # default rather than replacing it outright.  This ensures that
+                    # keys added in newer versions (e.g. new gesture slots) are
+                    # present even when the saved config pre-dates them.
+                    if isinstance(current, dict) and isinstance(value, dict):
+                        merged = dict(current)   # start from default (all current keys)
+                        merged.update(value)     # overlay saved values
+                        value = merged
                     if isinstance(current, bool) and not isinstance(value, bool):
                         # JSON int (0/1) als bool tolerieren, sonst überspringen
                         if isinstance(value, int):
