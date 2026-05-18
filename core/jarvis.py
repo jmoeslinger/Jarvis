@@ -46,7 +46,8 @@ _KNOWN_TOOL_NAMES = {
     "remember_info", "forget_info", "update_info", "search_memory",
     "run_terminal", "run_script", "read_file", "write_file",
     "read_clipboard", "analyze_screenshot",
-    "analyze_camera", "add_day_task", "get_day_plan", "complete_day_task",
+    "analyze_camera", "analyze_camera_video",
+    "add_day_task", "get_day_plan", "complete_day_task",
 }
 
 # BUG-031: Regex auf Modulebene kompilieren statt bei jedem Aufruf
@@ -167,12 +168,18 @@ class JarvisCore:
         from services.ai.day_planner import DayPlanner
         from services.vision.camera import CameraService
         from services.vision.vision_client import VisionAnalyzer
+        from services.vision.gesture_recognizer import GestureRecognizer
         self.day_planner = DayPlanner()
         self.camera      = CameraService(camera_index=settings.vision_camera_index)
         self.vision      = VisionAnalyzer(
             groq_api_key=settings.grok_api_key,
             gemini_api_key=settings.gemini_api_key,
             ollama_model=settings.vision_ollama_model,
+        )
+        self.gesture = GestureRecognizer(
+            on_trigger=self._on_gesture_trigger,
+            get_mappings=lambda: self.settings.gesture_mappings,
+            hold_seconds=settings.gesture_hold_seconds,
         )
 
         # Gespeicherte Modus-Einstellungen wiederherstellen
@@ -1572,7 +1579,8 @@ class JarvisCore:
         self.grok.register_tool("read_clipboard",      self._tool_clipboard)
         self.grok.register_tool("analyze_screenshot",  self._tool_screenshot)
         # Vision & Tagesplanung
-        self.grok.register_tool("analyze_camera",      self._tool_analyze_camera)
+        self.grok.register_tool("analyze_camera",       self._tool_analyze_camera)
+        self.grok.register_tool("analyze_camera_video", self._tool_analyze_camera_video)
         self.grok.register_tool("add_day_task",         self._tool_add_day_task)
         self.grok.register_tool("get_day_plan",         self._tool_get_day_plan)
         self.grok.register_tool("complete_day_task",    self._tool_complete_day_task)
@@ -1737,6 +1745,28 @@ class JarvisCore:
         logger.info(f"Kamera analysiert: {len(result)} Zeichen")
         return result
 
+    def _tool_analyze_camera_video(self, question: str = "", duration: float = 3.0) -> str:
+        """Nimmt eine kurze Videosequenz auf (Frames ueber duration Sekunden) und analysiert sie."""
+        if not self.settings.vision_enabled:
+            return "Vision-Feature ist deaktiviert. Bitte in den Einstellungen aktivieren."
+        try:
+            duration = max(1.0, min(10.0, float(duration)))
+        except (TypeError, ValueError):
+            duration = 3.0
+        self._notify("system", f"🎬 Video-Aufnahme ({duration:.0f}s)...")
+        frames = self.camera.capture_video_frames(
+            duration_seconds=duration,
+            max_frames=9,
+        )
+        if not frames:
+            return "Video-Aufnahme fehlgeschlagen. Bitte Kamera pruefen."
+        if not question:
+            question = "Was passiert in diesem Video? Beschreibe die Szene auf Deutsch."
+        self._notify("system", f"🔍 {len(frames)} Frames werden analysiert...")
+        result = self.vision.analyze_video(frames, question)
+        logger.info(f"Video analysiert: {len(frames)} Frames, {len(result)} Zeichen")
+        return result
+
     def _tool_add_day_task(self, task: str, priority: str = "normal", time_hint: str = "") -> str:
         """Fuegt eine Aufgabe zum Tagesplan hinzu."""
         result = self.day_planner.add_task(task, priority, time_hint)
@@ -1815,3 +1845,52 @@ class JarvisCore:
             self._notify("system", f"📷 Vision AN — {status}")
         else:
             self._notify("system", "📷 Vision AUS")
+
+    # ── Gestensteuerung ───────────────────────────────────────────────────────
+
+    def set_gesture_enabled(self, enabled: bool, frame_provider=None):
+        """
+        Schaltet die Gestensteuerung ein/aus.
+        frame_provider: Callable() → np.ndarray|None (wird von CameraWindow gesetzt).
+        """
+        self.settings.gesture_enabled = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+
+        if enabled:
+            if not self.gesture.available:
+                self._notify(
+                    "system",
+                    "⚠ MediaPipe nicht installiert — bitte 'pip install mediapipe' ausfuehren.",
+                )
+                self.settings.gesture_enabled = False
+                self.settings.save()
+                self._fire_settings_changed()
+                return
+            if frame_provider is not None:
+                self.gesture.start(frame_provider)
+                self._notify("system", "🖐 Gestensteuerung AN")
+            else:
+                self._notify(
+                    "system",
+                    "🖐 Gestensteuerung aktiviert — Kamera-Fenster oeffnen um zu starten.",
+                )
+        else:
+            self.gesture.stop()
+            self._notify("system", "🖐 Gestensteuerung AUS")
+
+    def save_gesture_mappings(self, mappings: dict, hold_seconds: float = None):
+        """Speichert die Geste → Befehl Zuordnungen."""
+        self.settings.gesture_mappings = mappings
+        if hold_seconds is not None:
+            self.settings.gesture_hold_seconds = max(0.3, float(hold_seconds))
+            self.gesture.update_hold_seconds(self.settings.gesture_hold_seconds)
+        self.settings.save()
+        self._notify("system", "💾 Gesten-Zuordnungen gespeichert.")
+
+    def _on_gesture_trigger(self, gesture: str, command: str):
+        """Callback vom GestureRecognizer — Befehl an Jarvis senden."""
+        from services.vision.gesture_recognizer import GESTURE_LABELS
+        label = GESTURE_LABELS.get(gesture, gesture)
+        self._notify("system", f"🖐 Geste: {label} → '{command}'")
+        self.send_text_command(command)

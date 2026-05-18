@@ -83,6 +83,18 @@ class Settings:
     gemini_api_key: str = ""            # Google Gemini API Key (optional, kostenlos)
     vision_ollama_model: str = "moondream"  # Lokales Vision-Modell
 
+    # ── Gestensteuerung ───────────────────────────────────────────────────────
+    gesture_enabled: bool = False       # Gestensteuerung aktivieren (MediaPipe)
+    gesture_hold_seconds: float = 1.5  # Wie lange Geste gehalten werden muss (Sekunden)
+    gesture_mappings: dict = field(default_factory=lambda: {
+        "open_palm":  "",
+        "fist":       "",
+        "thumbs_up":  "",
+        "peace":      "",
+        "pointing":   "",
+        "rock":       "",
+    })
+
     # Wiederholende Tasks — gespeichert als Liste von Dicts:
     # [{id, label, interval_minutes, command}, ...]
     recurring_tasks: List[Dict] = field(default_factory=list)

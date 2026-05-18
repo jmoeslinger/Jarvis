@@ -70,6 +70,70 @@ class CameraService:
             pass
         return available
 
+    def capture_video_frames(
+        self,
+        duration_seconds: float = 3.0,
+        max_frames: int = 9,
+        quality: int = 75,
+    ) -> List[str]:
+        """
+        Nimmt mehrere Frames ueber duration_seconds auf und gibt sie als
+        Base64-JPEG-Liste zurueck (gleichmaessig ueber die Dauer verteilt).
+        Oeffnet die Kamera einmalig und liest Frames in einem Gleichmaessig-
+        verteilten Zeitraster — schneller als mehrfaches Oeffnen/Schliessen.
+        """
+        import time as _time
+        try:
+            import cv2
+        except ImportError:
+            logger.error("OpenCV nicht installiert.")
+            return []
+
+        duration_seconds = max(0.5, min(30.0, float(duration_seconds)))
+        max_frames       = max(1, min(30, int(max_frames)))
+        interval         = duration_seconds / max_frames
+
+        frames_b64: List[str] = []
+
+        with self._lock:
+            cap = cv2.VideoCapture(self._camera_index, cv2.CAP_DSHOW)
+            try:
+                if not cap.isOpened():
+                    logger.error(f"Kamera {self._camera_index} fuer Video nicht erreichbar.")
+                    return []
+
+                # Auto-Fokus stabilisieren
+                for _ in range(5):
+                    cap.read()
+
+                t_start = _time.monotonic()
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+
+                for i in range(max_frames):
+                    # Auf naechsten Frame-Zeitpunkt warten
+                    target = t_start + i * interval
+                    now    = _time.monotonic()
+                    if target > now:
+                        _time.sleep(target - now)
+
+                    ret, frame = cap.read()
+                    if not ret or frame is None:
+                        continue
+
+                    ok, buf = cv2.imencode(".jpg", frame, encode_params)
+                    if ok:
+                        frames_b64.append(
+                            base64.b64encode(buf.tobytes()).decode("utf-8")
+                        )
+            finally:
+                cap.release()
+
+        logger.info(
+            f"Video aufgenommen: {len(frames_b64)}/{max_frames} Frames, "
+            f"{duration_seconds:.1f}s, Kamera {self._camera_index}"
+        )
+        return frames_b64
+
     def set_camera_index(self, index: int):
         self._camera_index = index
 

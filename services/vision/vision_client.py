@@ -9,12 +9,15 @@ Prioritaet:
 Verwendung:
     analyzer = VisionAnalyzer(groq_api_key="gsk_...", gemini_api_key="AI...")
     result   = analyzer.analyze(image_b64, "Was siehst du?")
+    result   = analyzer.analyze_video(frames_b64_list, "Was passiert hier?")
 """
+import base64
+import io
 import json
 import logging
 import urllib.error
 import urllib.request
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger("jarvis.vision")
 
@@ -92,6 +95,84 @@ class VisionAnalyzer:
             "Kein Vision-Provider verfuegbar. "
             "Bitte Groq-API-Key, Gemini-Key oder Ollama pruefen."
         )
+
+    def analyze_video(
+        self,
+        frames_b64: List[str],
+        question:   str = "",
+        grid_cols:  int = 3,
+    ) -> str:
+        """
+        Analysiert eine kurze Videosequenz als Liste von Base64-JPEG-Frames.
+        Die Frames werden zu einem Collage-Grid zusammengesetzt und als Einzelbild
+        an die verfuegbaren Vision-Provider gesendet.
+
+        frames_b64 : Liste von Base64-JPEG-Strings (z.B. 6–9 Frames à ~1s Abstand)
+        question   : Analyse-Frage (Deutsch); wird automatisch gesetzt wenn leer
+        grid_cols  : Anzahl Spalten im Grid (Standard: 3)
+        """
+        if not frames_b64:
+            return "Keine Video-Frames vorhanden — Aufnahme fehlgeschlagen."
+
+        if not question:
+            question = (
+                "Dies sind mehrere aufeinanderfolgende Frames aus einem kurzen Video. "
+                "Was passiert in dieser Szene? Beschreibe Bewegungen, Personen und "
+                "Veraenderungen zwischen den Frames auf Deutsch in 3-5 Saetzen."
+            )
+
+        # Kollage erzeugen — bei Fehler (kein PIL) erstes Frame direkt analysieren
+        try:
+            collage_b64 = self._build_grid_image(frames_b64, grid_cols=grid_cols)
+        except Exception as e:
+            logger.warning(f"Video-Kollage fehlgeschlagen ({e}), analysiere erstes Frame.")
+            return self.analyze(frames_b64[0], question)
+
+        logger.info(f"Video-Analyse: {len(frames_b64)} Frames als {grid_cols}-Spalten-Grid")
+        return self.analyze(collage_b64, question)
+
+    @staticmethod
+    def _build_grid_image(
+        frames_b64: List[str],
+        grid_cols:  int = 3,
+        thumb_size: tuple = (320, 240),
+    ) -> str:
+        """
+        Stitcht mehrere Base64-JPEG-Frames zu einem Grid-Bild zusammen.
+        Jeder Frame wird auf thumb_size skaliert; das Grid hat grid_cols Spalten.
+        Gibt das Ergebnis als Base64-JPEG-String zurueck.
+        """
+        from PIL import Image  # Import hier — vermeidet harten Fehler wenn PIL fehlt
+
+        images: List[Image.Image] = []
+        for f in frames_b64:
+            try:
+                raw = base64.b64decode(f)
+                img = Image.open(io.BytesIO(raw)).convert("RGB")
+                img.thumbnail(thumb_size, Image.LANCZOS)
+                images.append(img)
+            except Exception:
+                continue
+
+        if not images:
+            raise ValueError("Keine gueltigen Frames fuer Grid-Bild.")
+
+        cols = min(grid_cols, len(images))
+        rows = (len(images) + cols - 1) // cols
+        tw, th = thumb_size
+
+        # Dunkler Hintergrund (passt zu Jarvis-Theme)
+        grid = Image.new("RGB", (cols * tw, rows * th), (20, 20, 30))
+        for i, img in enumerate(images):
+            r, c = divmod(i, cols)
+            # Zentriert in seiner Zelle einfuegen
+            x = c * tw + (tw - img.width) // 2
+            y = r * th + (th - img.height) // 2
+            grid.paste(img, (x, y))
+
+        buf = io.BytesIO()
+        grid.save(buf, format="JPEG", quality=75)
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
 
     def update_config(
         self,

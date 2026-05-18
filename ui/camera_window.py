@@ -170,6 +170,18 @@ class CameraWindow:
         self._cam_info_lbl:     Optional[ctk.CTkLabel]   = None
         self._cam_btns:         List[ctk.CTkButton]      = []
 
+        # Video-Aufnahme
+        self._video_btn:           Optional[ctk.CTkButton] = None
+        self._is_recording_video:  bool                    = False
+        self._last_frame_raw = None         # letzter BGR-numpy-Frame (fuer Gesture)
+
+        # Gestensteuerung
+        self._gesture_enabled_var: Optional[ctk.BooleanVar] = None
+        self._gesture_hold_var:    Optional[ctk.StringVar]   = None
+        self._gesture_cmd_vars:    dict                      = {}   # {id: StringVar}
+        self._gesture_overlay_id:  Optional[int]             = None  # Canvas-Text-ID
+        self._gesture_bar_id:      Optional[int]             = None  # Canvas-Rechteck-ID
+
     # ── Oeffentlich ────────────────────────────────────────────────────────────
 
     def show(self, hud_root=None):
@@ -263,16 +275,16 @@ class CameraWindow:
             fill="#475569", font=("Segoe UI", 13),
         )
 
-        # Button-Leiste
+        # Button-Leiste (Zeile 1)
         btn_bar = ctk.CTkFrame(left, fg_color="transparent")
-        btn_bar.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        btn_bar.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 2))
         btn_bar.columnconfigure((0, 1, 2), weight=1, uniform="bb")
 
         ctk.CTkButton(
             btn_bar, text="📸  Snapshot",
             fg_color="#1e3a5f", hover_color="#2563eb",
             text_color="#93c5fd",
-            font=ctk.CTkFont(size=12, weight="bold"), height=38, corner_radius=8,
+            font=ctk.CTkFont(size=12, weight="bold"), height=36, corner_radius=8,
             command=self._act_snapshot,
         ).grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
@@ -280,7 +292,7 @@ class CameraWindow:
             btn_bar, text="🔍  KI analysieren",
             fg_color="#134e4a", hover_color="#0f766e",
             text_color="#5eead4",
-            font=ctk.CTkFont(size=12, weight="bold"), height=38, corner_radius=8,
+            font=ctk.CTkFont(size=12, weight="bold"), height=36, corner_radius=8,
             command=self._act_analyze,
         )
         self._analyze_btn.grid(row=0, column=1, padx=3, sticky="ew")
@@ -289,9 +301,31 @@ class CameraWindow:
             btn_bar, text="🗣  Jarvis fragen",
             fg_color="#1e293b", hover_color="#334155",
             text_color="#94a3b8",
-            font=ctk.CTkFont(size=12, weight="bold"), height=38, corner_radius=8,
+            font=ctk.CTkFont(size=12, weight="bold"), height=36, corner_radius=8,
             command=self._act_ask_jarvis,
         ).grid(row=0, column=2, padx=(3, 0), sticky="ew")
+
+        # Button-Leiste (Zeile 2)
+        btn_bar2 = ctk.CTkFrame(left, fg_color="transparent")
+        btn_bar2.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+        btn_bar2.columnconfigure((0, 1), weight=1, uniform="bb2")
+
+        self._video_btn = ctk.CTkButton(
+            btn_bar2, text="🎬  Video aufnehmen",
+            fg_color="#1a1a4a", hover_color="#2d2d7a",
+            text_color="#a5b4fc",
+            font=ctk.CTkFont(size=12, weight="bold"), height=34, corner_radius=8,
+            command=self._act_record_video,
+        )
+        self._video_btn.grid(row=0, column=0, padx=(0, 3), sticky="ew")
+
+        ctk.CTkButton(
+            btn_bar2, text="🖐  Gesten kalibrieren",
+            fg_color="#1e293b", hover_color="#334155",
+            text_color="#94a3b8",
+            font=ctk.CTkFont(size=12, weight="bold"), height=34, corner_radius=8,
+            command=self._act_calibrate_gesture,
+        ).grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
         # ── RECHTS: Einstellungen + Ergebnis ──────────────────────────────────
         right = ctk.CTkScrollableFrame(
@@ -402,6 +436,82 @@ class CameraWindow:
             text_color="#e2e8f0", height=32,
         )
         self._question_entry.pack(fill="x", padx=6, pady=(0, 8))
+
+        # ── Gestensteuerung ────────────────────────────────────────────────────
+        _sec("GESTENSTEUERUNG  (MediaPipe)")
+
+        # Aktivierung + Hold-Dauer
+        gesture_top = ctk.CTkFrame(right, fg_color="transparent")
+        gesture_top.pack(fill="x", padx=6, pady=(0, 4))
+
+        from services.vision.gesture_recognizer import mp_available
+        gesture_ok = mp_available()
+        gesture_hint = "" if gesture_ok else "  ⚠ pip install mediapipe"
+
+        self._gesture_enabled_var = ctk.BooleanVar(
+            value=self._jarvis.settings.gesture_enabled
+        )
+        ctk.CTkCheckBox(
+            gesture_top,
+            text=f"Gestensteuerung aktiv{gesture_hint}",
+            variable=self._gesture_enabled_var,
+            font=ctk.CTkFont(size=11),
+            text_color="#94a3b8" if gesture_ok else "#f59e0b",
+            checkmark_color="#a5b4fc", fg_color="#2d2d7a",
+            hover_color="#1a1a4a", border_color="#334155",
+            command=self._on_gesture_toggle,
+        ).pack(side="left")
+
+        hold_row = ctk.CTkFrame(right, fg_color="transparent")
+        hold_row.pack(fill="x", padx=6, pady=(0, 4))
+
+        ctk.CTkLabel(hold_row, text="Hold-Dauer (s):",
+            font=ctk.CTkFont(size=10), text_color="#475569",
+        ).pack(side="left")
+
+        self._gesture_hold_var = ctk.StringVar(
+            value=str(self._jarvis.settings.gesture_hold_seconds)
+        )
+        ctk.CTkEntry(
+            hold_row,
+            textvariable=self._gesture_hold_var,
+            fg_color="#1e293b", border_color="#334155",
+            text_color="#e2e8f0", height=26, width=52,
+        ).pack(side="left", padx=(6, 0))
+
+        # Geste → Befehl Mapping
+        _lbl("Geste → Jarvis-Befehl  (leer = deaktiviert)")
+
+        from services.vision.gesture_recognizer import GESTURE_LABELS
+        mappings = self._jarvis.settings.gesture_mappings
+
+        for gesture_id, gesture_label in GESTURE_LABELS.items():
+            row = ctk.CTkFrame(right, fg_color="transparent")
+            row.pack(fill="x", padx=6, pady=1)
+
+            ctk.CTkLabel(row, text=gesture_label,
+                font=ctk.CTkFont(size=11), text_color="#64748b",
+                width=130, anchor="w",
+            ).pack(side="left")
+
+            var = ctk.StringVar(value=mappings.get(gesture_id, ""))
+            self._gesture_cmd_vars[gesture_id] = var
+
+            ctk.CTkEntry(
+                row,
+                textvariable=var,
+                placeholder_text="z.B.: Öffne Spotify",
+                fg_color="#1e293b", border_color="#334155",
+                text_color="#e2e8f0", height=28,
+            ).pack(side="left", fill="x", expand=True)
+
+        ctk.CTkButton(
+            right, text="💾  Gesten speichern",
+            fg_color="#2d2d7a", hover_color="#3b3baa",
+            text_color="#a5b4fc",
+            font=ctk.CTkFont(size=12), height=34, corner_radius=8,
+            command=self._save_gesture_settings,
+        ).pack(fill="x", padx=6, pady=(4, 8))
 
         # ── Ergebnis ──────────────────────────────────────────────────────────
         _sec("KI-ERGEBNIS")
@@ -601,6 +711,14 @@ class CameraWindow:
         )
         self._preview_thread.start()
 
+        # Gestensteuerung anbinden wenn aktiviert
+        if (
+            self._jarvis.settings.gesture_enabled
+            and self._jarvis.gesture.available
+            and not self._jarvis.gesture._running
+        ):
+            self._jarvis.gesture.start(lambda: self._last_frame_raw)
+
     def _stop_preview(self):
         """
         Stoppt den Preview-Thread sauber.
@@ -608,8 +726,14 @@ class CameraWindow:
         BUG-014: Thread wird mit Timeout ge-joined damit kein doppelter
                  Zugriff auf self._cap / self._canvas_tk_img entsteht.
         Darf von beliebigem Thread aus aufgerufen werden.
+        Stoppt auch den GestureRecognizer.
         """
         self._running = False
+        # Gestensteuerung stoppen wenn der Preview aufhoert
+        try:
+            self._jarvis.gesture.stop()
+        except Exception:
+            pass
         # Kamera sofort freigeben damit der Thread nicht in read() haengt
         cap = self._cap
         if cap is not None:
@@ -661,6 +785,9 @@ class CameraWindow:
                     self._current_frame_b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
             except Exception:
                 pass
+
+            # Rohen Frame fuer Gestensteuerung bereitstellen (BGR, numpy)
+            self._last_frame_raw = frame
 
             # PIL-Bild erzeugen und via after() an den Canvas senden
             # BUG-013: kein _light_image-Hack mehr — PIL direkt uebergeben
@@ -722,6 +849,7 @@ class CameraWindow:
         Hauptthread-Callback: PIL-Bild → tk.PhotoImage → Canvas.
         BUG-013: kein _light_image-Hack mehr.
         BUG-027: ignoriert Frame wenn inzwischen ein neuerer pending ist.
+        Zeichnet zusaetzlich ein Gesten-Overlay wenn Gestensteuerung aktiv.
         """
         try:
             if not (self._preview_canvas and self._win and self._win.winfo_exists()):
@@ -734,8 +862,62 @@ class CameraWindow:
             self._canvas_tk_img = tk_img   # GC-Schutz
             self._pending_frame = None
             self._draw_canvas_image(tk_img)
+            # Gesten-Overlay aktualisieren
+            self._update_gesture_overlay()
         except Exception as e:
             logger.debug(f"Preview-Update-Fehler: {e}")
+
+    def _update_gesture_overlay(self):
+        """Zeichnet Geste + Hold-Fortschritt als Overlay auf den Canvas."""
+        try:
+            if not (self._preview_canvas and self._win and self._win.winfo_exists()):
+                return
+            gesture = self._jarvis.gesture.current_gesture
+            progress = self._jarvis.gesture.hold_progress
+
+            # Alte Overlays entfernen
+            self._preview_canvas.delete("gesture_overlay")
+
+            if not (self._jarvis.settings.gesture_enabled and gesture):
+                return
+
+            from services.vision.gesture_recognizer import GESTURE_LABELS
+            label = GESTURE_LABELS.get(gesture, gesture)
+
+            cw = self._preview_canvas.winfo_width()
+            ch = self._preview_canvas.winfo_height()
+
+            # Hintergrund-Rechteck oben links
+            bar_w = min(230, cw - 10)
+            self._preview_canvas.create_rectangle(
+                8, 8, 8 + bar_w, 56,
+                fill="#0d0d1e", outline="#2d2d7a", width=1,
+                tags="gesture_overlay",
+            )
+            # Geste-Name
+            self._preview_canvas.create_text(
+                16, 20, anchor="nw",
+                text=label,
+                fill="#a5b4fc",
+                font=("Segoe UI", 13, "bold"),
+                tags="gesture_overlay",
+            )
+            # Fortschrittsbalken
+            bar_x1, bar_y1, bar_x2, bar_y2 = 16, 36, 8 + bar_w - 8, 48
+            self._preview_canvas.create_rectangle(
+                bar_x1, bar_y1, bar_x2, bar_y2,
+                fill="#1a1a4a", outline="#334155",
+                tags="gesture_overlay",
+            )
+            fill_w = int((bar_x2 - bar_x1) * max(0.0, min(1.0, progress)))
+            if fill_w > 0:
+                self._preview_canvas.create_rectangle(
+                    bar_x1, bar_y1, bar_x1 + fill_w, bar_y2,
+                    fill="#818cf8", outline="",
+                    tags="gesture_overlay",
+                )
+        except Exception as e:
+            logger.debug(f"Gesten-Overlay Fehler: {e}")
 
     def _update_preview(self, img):
         """Legacy-Compat fuer alten CTkImage-Aufruf (nicht mehr verwendet intern)."""
@@ -821,6 +1003,107 @@ class CameraWindow:
         if self._result_lbl:
             self._result_lbl.configure(text="✓ Befehl an Jarvis gesendet", text_color="#22c55e")
 
+    def _act_record_video(self):
+        """Startet oder zeigt Video-Aufnahme-Fortschritt an."""
+        if self._is_recording_video:
+            return  # bereits laeuft
+
+        question = self._question_entry.get().strip() if self._question_entry else ""
+        if not question:
+            question = "Was passiert in diesem Video? Beschreibe die Szene auf Deutsch."
+
+        self._is_recording_video = True
+        if self._video_btn:
+            self._video_btn.configure(
+                state="disabled", text="⏳  Aufnehme 3s...",
+                fg_color="#3b0764", text_color="#e879f9",
+            )
+        self._set_result_text("🎬 Video-Aufnahme läuft (3 Sekunden)...")
+        if self._result_lbl:
+            self._result_lbl.configure(text="Bitte warten...", text_color="#f59e0b")
+
+        def _run():
+            try:
+                frames = self._jarvis.camera.capture_video_frames(
+                    duration_seconds=3.0, max_frames=9,
+                )
+                if not frames:
+                    result = "⚠ Video-Aufnahme fehlgeschlagen. Kamera prüfen."
+                else:
+                    result = self._jarvis.vision.analyze_video(frames, question)
+            except Exception as e:
+                result = f"Fehler: {e}"
+            if self._win and self._win.winfo_exists():
+                self._win.after(0, lambda r=result: self._on_video_done(r))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_video_done(self, text: str):
+        """Callback wenn Video-Aufnahme + Analyse fertig."""
+        self._is_recording_video = False
+        self._set_result_text(text)
+        if self._result_lbl:
+            self._result_lbl.configure(text="✓ Video-Analyse abgeschlossen", text_color="#22c55e")
+        if self._video_btn:
+            self._video_btn.configure(
+                state="normal", text="🎬  Video aufnehmen",
+                fg_color="#1a1a4a", text_color="#a5b4fc",
+            )
+
+    def _act_calibrate_gesture(self):
+        """Zeigt kurzen Kalibrierungs-Hinweis in der Ergebnis-Box."""
+        from services.vision.gesture_recognizer import GESTURE_LABELS, mp_available
+        if not mp_available():
+            self._set_result_text(
+                "⚠ MediaPipe ist nicht installiert.\n\n"
+                "Bitte installieren:\n  pip install mediapipe\n\n"
+                "Danach Jarvis neu starten."
+            )
+            if self._result_lbl:
+                self._result_lbl.configure(text="MediaPipe fehlt", text_color="#ef4444")
+            return
+
+        lines = [
+            "🖐 Gestenerkennung — erkannte Gesten:\n",
+            "Zeige der Kamera eine Geste für 1–2 Sekunden.\n",
+        ]
+        for gid, glabel in GESTURE_LABELS.items():
+            cmd = self._jarvis.settings.gesture_mappings.get(gid, "")
+            if cmd:
+                lines.append(f"  {glabel}  →  '{cmd}'")
+            else:
+                lines.append(f"  {glabel}  →  (kein Befehl)")
+        lines.append("\nGestensteuerung unten aktivieren und Befehle zuweisen.")
+        self._set_result_text("\n".join(lines))
+        if self._result_lbl:
+            self._result_lbl.configure(text="Gesten-Übersicht", text_color="#a5b4fc")
+
+    def _on_gesture_toggle(self):
+        """Wird aufgerufen wenn die Gesture-Checkbox umgeschaltet wird."""
+        enabled = self._gesture_enabled_var.get() if self._gesture_enabled_var else False
+        frame_provider = (lambda: self._last_frame_raw) if self._running else None
+        self._jarvis.set_gesture_enabled(enabled, frame_provider=frame_provider)
+        # Checkbox aktualisieren (falls set_gesture_enabled die Einstellung zuruecksetzt)
+        if self._gesture_enabled_var:
+            self._gesture_enabled_var.set(self._jarvis.settings.gesture_enabled)
+
+    def _save_gesture_settings(self):
+        """Speichert Gesten-Mappings + Hold-Dauer."""
+        mappings = {
+            gid: var.get().strip()
+            for gid, var in self._gesture_cmd_vars.items()
+        }
+        try:
+            hold = float(self._gesture_hold_var.get()) if self._gesture_hold_var else 1.5
+        except (ValueError, TypeError):
+            hold = 1.5
+
+        self._jarvis.save_gesture_mappings(mappings, hold_seconds=hold)
+        if self._result_lbl:
+            self._result_lbl.configure(
+                text="✓ Gesten gespeichert", text_color="#a5b4fc"
+            )
+
     # ── Einstellungen ─────────────────────────────────────────────────────────
 
     def _save_settings(self):
@@ -856,6 +1139,11 @@ class CameraWindow:
 
     def _on_close(self):
         self._running = False
+        # Gestensteuerung sauber beenden
+        try:
+            self._jarvis.gesture.stop()
+        except Exception:
+            pass
         if self._cap:
             try:
                 self._cap.release()
