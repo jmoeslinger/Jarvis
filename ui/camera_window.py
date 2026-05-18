@@ -23,6 +23,14 @@ logger = logging.getLogger("jarvis.camera_win")
 # Hilfsfunktionen (ausserhalb der Klasse — laufen in Hintergrund-Threads)
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _pil_to_png_bytes(pil_image) -> bytes:
+    """Konvertiert ein PIL-Image in PNG-Bytes fuer tk.PhotoImage."""
+    import io
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _cv2_available() -> bool:
     """Gibt True zurueck wenn OpenCV importierbar ist."""
     try:
@@ -137,7 +145,10 @@ class CameraWindow:
         self._hud_root = None
 
         # Preview-State
-        self._preview_label: Optional[ctk.CTkLabel] = None
+        self._preview_canvas = None          # tk.Canvas fuer Kamera-Vorschau
+        self._preview_label = None           # Alias auf _preview_canvas
+        self._canvas_image_id: Optional[int] = None
+        self._canvas_tk_img = None
         self._status_lbl:    Optional[ctk.CTkLabel] = None
         self._running = False
         self._cap = None
@@ -229,13 +240,26 @@ class CameraWindow:
         left.rowconfigure(0, weight=1)
         left.columnconfigure(0, weight=1)
 
-        self._preview_label = ctk.CTkLabel(
+        # tk.Canvas fuer die Kamera-Vorschau — erlaubt korrekte Zentrierung
+        import tkinter as tk
+        self._preview_canvas = tk.Canvas(
             left,
-            text="📷\n\nSuche Kamera...",
-            font=ctk.CTkFont(size=15),
-            text_color="#475569",
+            bg="#1e293b",
+            highlightthickness=0,
         )
-        self._preview_label.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        self._preview_canvas.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        self._preview_canvas.bind("<Configure>", self._on_canvas_resize)
+        # Kompatibilitaets-Alias damit bestehende Aufrufe weiter funktionieren
+        self._preview_label = self._preview_canvas
+        self._canvas_image_id: Optional[int] = None
+        self._canvas_tk_img = None   # Referenz halten — GC-Schutz
+
+        # Start-Text (wird durch erstes Frame ersetzt)
+        self._preview_canvas.create_text(
+            10, 10, anchor="nw",
+            text="⏳ Suche Kamera...",
+            fill="#475569", font=("Segoe UI", 13),
+        )
 
         # Button-Leiste
         btn_bar = ctk.CTkFrame(left, fg_color="transparent")
@@ -653,11 +677,39 @@ class CameraWindow:
                 pass
         return None
 
-    def _update_preview(self, img):
+    def _on_canvas_resize(self, event=None):
+        """Zentriert das letzte Frame neu wenn das Fenster vergroessert/verkleinert wird."""
+        if self._canvas_tk_img is not None:
+            self._draw_canvas_image(self._canvas_tk_img)
+
+    def _draw_canvas_image(self, tk_img):
+        """Zeichnet tk_img zentriert auf dem Canvas."""
         try:
-            if self._preview_label and self._win and self._win.winfo_exists():
-                self._preview_label.configure(image=img, text="")
+            if not (self._preview_canvas and self._win and self._win.winfo_exists()):
+                return
+            cw = self._preview_canvas.winfo_width()
+            ch = self._preview_canvas.winfo_height()
+            if cw < 2 or ch < 2:
+                return
+            self._preview_canvas.delete("all")
+            self._canvas_image_id = self._preview_canvas.create_image(
+                cw // 2, ch // 2, anchor="center", image=tk_img
+            )
         except Exception:
+            pass
+
+    def _update_preview(self, img):
+        """Empfaengt ein neues CTkImage und zeichnet es zentriert auf dem Canvas."""
+        try:
+            if not (self._preview_canvas and self._win and self._win.winfo_exists()):
+                return
+            # CTkImage → PIL → PhotoImage fuer tk.Canvas
+            pil_img = img._light_image  # internes PIL-Bild aus CTkImage
+            import tkinter as tk
+            tk_img = tk.PhotoImage(data=_pil_to_png_bytes(pil_img))
+            self._canvas_tk_img = tk_img   # GC-Schutz
+            self._draw_canvas_image(tk_img)
+        except Exception as e:
             pass
 
     # ── Kamera neu starten ────────────────────────────────────────────────────
