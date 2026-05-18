@@ -162,18 +162,21 @@ class ControlPanel:
 
         # CTkToplevel ruft intern withdraw() auf.
         # update() → alle ausstehenden Tk-Events abarbeiten (inkl. CTkToplevel-Init)
-        # state('normal') erzwingt normalen Fensterzustand (nicht iconified, nicht withdrawn)
+        # Layout-Berechnungen abschliessen während Fenster noch withdrawn ist
         self._win.update()
+
+        # WS_EX_APPWINDOW VOR deiconify() setzen → kein visueller Glitch durch
+        # nachgelagerten SetWindowPos(SWP_FRAMECHANGED) bei sichtbarem Fenster
+        self._force_taskbar()
+
+        # Fenster einmalig sauber anzeigen
         self._win.state("normal")
         self._win.deiconify()
-        self._win.update()
         self._win.lift()
         self._win.focus_force()
 
-        # WS_EX_APPWINDOW für Taskbar-Eintrag + Alt+Tab
-        self._win.after(300, self._force_taskbar)
-        # Sicherstellen dass Fenster nach dem Taskbar-Trick noch sichtbar ist
-        self._win.after(500, self._ensure_visible)
+        # Sicherheitsprüfung nach kurzer Verzögerung
+        self._win.after(400, self._ensure_visible)
 
     def _on_close(self):
         if self._win:
