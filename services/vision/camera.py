@@ -81,6 +81,11 @@ class CameraService:
         Base64-JPEG-Liste zurueck (gleichmaessig ueber die Dauer verteilt).
         Oeffnet die Kamera einmalig und liest Frames in einem Gleichmaessig-
         verteilten Zeitraster — schneller als mehrfaches Oeffnen/Schliessen.
+
+        BUG-073 fix: Lock is held only while opening the VideoCapture handle.
+        The frame-reading loop (which contains time.sleep() calls spanning the
+        full recording duration) runs lock-free.  This prevents is_available()
+        and capture_base64() from blocking for up to 30 seconds.
         """
         import time as _time
         try:
@@ -95,38 +100,44 @@ class CameraService:
 
         frames_b64: List[str] = []
 
+        # BUG-073: Acquire lock only to open the camera, then release immediately.
+        # The cap handle is our exclusive resource for the rest of the method.
         with self._lock:
             cap = cv2.VideoCapture(self._camera_index, cv2.CAP_DSHOW)
-            try:
-                if not cap.isOpened():
-                    logger.error(f"Kamera {self._camera_index} fuer Video nicht erreichbar.")
-                    return []
+            opened = cap.isOpened()
 
-                # Auto-Fokus stabilisieren
-                for _ in range(5):
-                    cap.read()
+        if not opened:
+            cap.release()
+            logger.error(f"Kamera {self._camera_index} fuer Video nicht erreichbar.")
+            return []
 
-                t_start = _time.monotonic()
-                encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+        # Frame-reading loop — no lock held here (avoids blocking other callers)
+        try:
+            # Auto-Fokus stabilisieren
+            for _ in range(5):
+                cap.read()
 
-                for i in range(max_frames):
-                    # Auf naechsten Frame-Zeitpunkt warten
-                    target = t_start + i * interval
-                    now    = _time.monotonic()
-                    if target > now:
-                        _time.sleep(target - now)
+            t_start = _time.monotonic()
+            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
 
-                    ret, frame = cap.read()
-                    if not ret or frame is None:
-                        continue
+            for i in range(max_frames):
+                # Auf naechsten Frame-Zeitpunkt warten
+                target = t_start + i * interval
+                now    = _time.monotonic()
+                if target > now:
+                    _time.sleep(target - now)
 
-                    ok, buf = cv2.imencode(".jpg", frame, encode_params)
-                    if ok:
-                        frames_b64.append(
-                            base64.b64encode(buf.tobytes()).decode("utf-8")
-                        )
-            finally:
-                cap.release()
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    continue
+
+                ok, buf = cv2.imencode(".jpg", frame, encode_params)
+                if ok:
+                    frames_b64.append(
+                        base64.b64encode(buf.tobytes()).decode("utf-8")
+                    )
+        finally:
+            cap.release()
 
         logger.info(
             f"Video aufgenommen: {len(frames_b64)}/{max_frames} Frames, "

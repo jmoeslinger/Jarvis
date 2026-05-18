@@ -38,6 +38,7 @@ Gespeicherte Infos aktiv nutzen: Namen gelegentlich verwenden, Vorlieben in Empf
 
 VISION & TAGESPLANUNG — automatisch nutzen:
 - analyze_camera(question): Kamera-Foto aufnehmen und analysieren — nutze dies wenn Nutzer fragt "was siehst du", "schau mal", "was ist vor mir" oder aehnliches.
+- analyze_camera_video(question): Kurzen Kamera-Clip aufnehmen (3 Sek., 9 Frames als Bild-Raster) und analysieren — nutze dies wenn Nutzer fragt "was passiert gerade", "schau was ich mache", "nimm ein Video auf" oder aehnliches.
 - add_day_task(task, priority, time_hint): Aufgabe zum Tagesplan hinzufuegen.
 - get_day_plan(): Aktuellen Tagesplan abrufen.
 - complete_day_task(task_id_or_name): Aufgabe als erledigt markieren.\
@@ -385,6 +386,29 @@ _TOOLS: List[Dict[str, Any]] = [
         },
     },
     # ── Vision & Tagesplanung ─────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_camera_video",
+            "description": (
+                "Nimmt einen kurzen Kamera-Clip auf (ca. 3 Sekunden, 9 Frames) "
+                "und analysiert ihn als Bild-Raster via Vision-KI. "
+                "Nutze dies wenn der Nutzer fragt 'was passiert gerade', "
+                "'schau was ich mache', 'nimm ein Video auf', "
+                "'was tue ich gerade' oder aehnliches."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Spezifische Frage zum Video-Inhalt, z.B. 'Was mache ich gerade?'",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {

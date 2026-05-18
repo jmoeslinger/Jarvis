@@ -231,6 +231,14 @@ class GestureRecognizer:
             self._running = False
             return
 
+        # BUG-074: import cv2 once here, not on every frame inside the loop.
+        try:
+            import cv2
+        except ImportError:
+            logger.error("OpenCV nicht installiert — Gestenerkennung nicht moeglich.")
+            self._running = False
+            return
+
         hands_solution = mp.solutions.hands
         min_dt = 1.0 / self._fps_limit
 
@@ -249,7 +257,6 @@ class GestureRecognizer:
                     continue
 
                 try:
-                    import cv2
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     result = hands.process(rgb)
                 except Exception as e:
