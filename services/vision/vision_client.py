@@ -2,9 +2,9 @@
 Vision-Analyse — mehrere Provider fuer Bild-Text-Anfragen.
 
 Prioritaet:
-  1. Groq Llama-3.2-Vision  (llama-3.2-11b-vision-preview) — existierender Groq-Key
-  2. Google Gemini Flash     (gemini-1.5-flash)             — kostenlos, beste Qualitaet
-  3. Ollama (lokal)          (moondream / llava)             — offline, kein Key noetig
+  1. Groq Llama-4-Scout  (meta-llama/llama-4-scout-17b-16e-instruct) — existierender Groq-Key
+  2. Google Gemini Flash  (gemini-1.5-flash)                          — kostenlos, beste Qualitaet
+  3. Ollama (lokal)       (moondream / llava)                          — offline, kein Key noetig
 
 Verwendung:
     analyzer = VisionAnalyzer(groq_api_key="gsk_...", gemini_api_key="AI...")
@@ -25,6 +25,14 @@ _DEFAULT_QUESTION = (
 
 
 class VisionAnalyzer:
+    # Prioritized list of Groq vision models to try (in order)
+    _GROQ_VISION_MODELS = [
+        "meta-llama/llama-4-scout-17b-16e-instruct",  # Llama 4 Scout — primary (2025+)
+        "meta-llama/llama-4-maverick-17b-128e-instruct",  # Llama 4 Maverick — fallback
+        "llama-3.2-90b-vision-preview",               # Legacy (may be decommissioned)
+        "llama-3.2-11b-vision-preview",               # Legacy (decommissioned)
+    ]
+
     def __init__(
         self,
         groq_api_key:  str = "",
@@ -105,22 +113,36 @@ class VisionAnalyzer:
             api_key=self._groq_key,
             base_url="https://api.groq.com/openai/v1",
         )
-        response = client.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
-                    },
-                    {"type": "text", "text": question},
-                ],
-            }],
-            max_tokens=1024,
-            timeout=30,
-        )
-        return response.choices[0].message.content or ""
+        last_err = None
+        for model in self._GROQ_VISION_MODELS:
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
+                            },
+                            {"type": "text", "text": question},
+                        ],
+                    }],
+                    max_tokens=1024,
+                    timeout=30,
+                )
+                result = response.choices[0].message.content or ""
+                if result.strip():
+                    logger.info(f"Groq Vision: Modell '{model}' verwendet.")
+                    return result
+            except Exception as e:
+                err_str = str(e)
+                if "decommissioned" in err_str or "does not exist" in err_str or "404" in err_str:
+                    logger.debug(f"Groq Modell '{model}' nicht verfuegbar, naechstes versuchen...")
+                    last_err = e
+                    continue
+                raise  # Anderer Fehler (Netz, Auth) → direkt weitergeben
+        raise last_err or RuntimeError("Kein Groq Vision-Modell verfuegbar.")
 
     def _analyze_gemini(self, image_b64: str, question: str) -> str:
         url = (

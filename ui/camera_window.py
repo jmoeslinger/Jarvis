@@ -32,10 +32,50 @@ def _cv2_available() -> bool:
         return False
 
 
+def _get_camera_names_windows() -> dict:
+    """
+    Gibt ein Dict {index: name} zurueck, das Windows-Kameranamen via PowerShell ermittelt.
+    Virtuelle Kameras (OBS, etc.) sind identifizierbar am Namen.
+    Gibt leeres Dict zurueck wenn nicht aufrufbar.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command",
+             "Get-PnpDevice | Where-Object {$_.Class -eq 'Camera'} | "
+             "Select-Object FriendlyName, Status | ConvertTo-Json"],
+            capture_output=True, text=True, timeout=8,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return {}
+        import json
+        raw = json.loads(result.stdout)
+        if isinstance(raw, dict):
+            raw = [raw]  # Einzelnes Objekt → Liste
+        names = {}
+        for i, entry in enumerate(raw):
+            if isinstance(entry, dict):
+                names[i] = entry.get("FriendlyName", f"Kamera {i}")
+        return names
+    except Exception:
+        return {}
+
+
+def _is_virtual_camera(name: str) -> bool:
+    """
+    Gibt True zurueck wenn der Kameraname auf eine virtuelle/Software-Kamera hindeutet.
+    """
+    lower = (name or "").lower()
+    virtual_keywords = ["obs", "virtual", "vcam", "snap camera", "droidcam",
+                        "iriun", "epoccam", "camo", "mmhmm", "xsplit",
+                        "nvidia broadcast", "amd noise", "manycam"]
+    return any(kw in lower for kw in virtual_keywords)
+
+
 def _list_cameras() -> List[Tuple[int, str]]:
     """
     Gibt Liste von (index, label) verfuegbarer Kameras zurueck.
-    Testet Indizes 0–5 ohne CAP_DSHOW-Flag als Fallback.
+    Testet Indizes 0–5 und kennzeichnet virtuelle Kameras im Label.
     Laeuft in einem Hintergrund-Thread — nie im Hauptthread aufrufen!
     """
     import cv2
@@ -64,56 +104,23 @@ def _list_cameras() -> List[Tuple[int, str]]:
     return result
 
 
-def _find_best_camera(exclude_indices: List[int] = None) -> int:
+def _find_best_camera(cameras: List[Tuple[int, str]], exclude_virtual: bool = True) -> int:
     """
-    Versucht die erste echte (nicht-virtuelle) Kamera zu finden.
-    Gibt den Index zurueck, oder 0 wenn nichts besseres gefunden wurde.
-    Unterscheidungsmerkmal: echte Webcams haben hoeheren Farbvarianzen als
-    Vollbild-Einfarbkameras oder Logo-Streams (virtuelle Kameras).
+    Waehlt die beste (echte) Kamera aus der Liste aus.
+    Bevorzugt Kameras, deren Name NICHT auf eine virtuelle Kamera hinweist.
+    Gibt den ersten verfuegbaren Index zurueck.
     """
-    try:
-        import cv2
-        import numpy as np
-        exclude = set(exclude_indices or [])
-        best_idx = 0
-        best_variance = -1.0
-
-        for i in range(6):
-            if i in exclude:
-                continue
-            cap = None
-            try:
-                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-                if not cap.isOpened():
-                    cap.release()
-                    cap = cv2.VideoCapture(i)
-                if not cap.isOpened():
-                    continue
-                # Mehrere Frames skippen damit die Kamera sich stabilisiert
-                for _ in range(5):
-                    cap.read()
-                ok, frame = cap.read()
-                if not ok or frame is None:
-                    continue
-                # Farbvarianz als Echtheit-Indikator (virtuelle Kameras = niedrig)
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                variance = float(np.var(gray))
-                logger.debug(f"Kamera {i}: Varianz={variance:.1f}")
-                if variance > best_variance:
-                    best_variance = variance
-                    best_idx = i
-            except Exception:
-                pass
-            finally:
-                if cap is not None:
-                    try:
-                        cap.release()
-                    except Exception:
-                        pass
-
-        return best_idx
-    except Exception:
+    if not cameras:
         return 0
+
+    # Zuerst nicht-virtuelle Kameras bevorzugen
+    if exclude_virtual:
+        real_cams = [(i, lbl) for i, lbl in cameras if not _is_virtual_camera(lbl)]
+        if real_cams:
+            return real_cams[0][0]
+
+    # Fallback: erste verfuegbare Kamera
+    return cameras[0][0]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -393,39 +400,90 @@ class CameraWindow:
         """
         Laeuft einmalig beim Start im Hintergrund:
         1. Prueft ob OpenCV verfuegbar ist
-        2. Scannt alle Kameras
-        3. Waehlt automatisch die beste (echte) Kamera
-        4. Baut die Kamera-Auswahl-Buttons auf
-        5. Startet den Preview-Loop
+        2. Holt Kameranamen aus Windows (PnP)
+        3. Scannt alle per OpenCV erreichbaren Kameras
+        4. Waehlt automatisch die beste (echte, nicht-virtuelle) Kamera
+        5. Baut die Kamera-Auswahl-Buttons auf
+        6. Startet den Preview-Loop
         """
         if not _cv2_available():
             self._set_status("⚠ OpenCV fehlt — pip install opencv-python", "#ef4444")
             self._update_cam_info("OpenCV nicht installiert.\nBitte: pip install opencv-python")
             return
 
-        # Kameras scannen
-        self._update_cam_info("Scanne Kameras...")
-        cameras = _list_cameras()
+        # Windows-Kameranamen abfragen (Hintergrund-Thread OK)
+        self._update_cam_info("Ermittle Kameranamen...")
+        win_names = _get_camera_names_windows()  # {index: "Integrated Camera"}
 
-        if not cameras:
-            self._set_status("✗ Keine Kamera gefunden", "#ef4444")
-            self._update_cam_info("Keine Kamera gefunden.\nUSB-Webcam anstecken?")
+        # Kameras scannen (per OpenCV)
+        self._update_cam_info("Scanne Kameras...")
+        cameras_raw = _list_cameras()  # [(index, "Kamera N")]
+
+        if not cameras_raw:
+            # Vielleicht ist nur die Windows-Kamera disabled — hinweisen
+            if win_names:
+                disabled_names = ", ".join(win_names.values())
+                self._set_status("⚠ Kamera deaktiviert", "#f59e0b")
+                self._update_cam_info(
+                    f"Gefunden (deaktiviert): {disabled_names}\n\n"
+                    "Bitte aktivieren:\n"
+                    "Geräte-Manager → Kameras →\n"
+                    "Rechtsklick → Gerät aktivieren"
+                )
+            else:
+                self._set_status("✗ Keine Kamera gefunden", "#ef4444")
+                self._update_cam_info("Keine Kamera gefunden.\nUSB-Webcam anstecken?")
             return
+
+        # Labels mit Windows-Namen anreichern
+        cameras: List[Tuple[int, str]] = []
+        for idx, raw_label in cameras_raw:
+            # Win-Namen sind nach Erkennungsreihenfolge nummeriert — versuchen zu matchen
+            win_label = win_names.get(idx, "")
+            if win_label:
+                label = f"{win_label}"
+                if _is_virtual_camera(win_label):
+                    label += " (virtuell)"
+            else:
+                # Kein Windows-Name: OpenCV hat direkten Zugriff → wahrscheinlich virtuelle Cam
+                label = f"Kamera {idx}"
+                # Versuche OBS Virtual Camera per typischen Merkmalen zu erkennen
+                try:
+                    import cv2, numpy as np
+                    cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                    if cap.isOpened():
+                        for _ in range(3): cap.read()
+                        ok, frame = cap.read()
+                        if ok and frame is not None:
+                            h, w = frame.shape[:2]
+                            if w == 1920 and h == 1080:  # Typisch fuer OBS Virtual Camera
+                                label = f"Kamera {idx} (OBS/Virtuell)"
+                        cap.release()
+                except Exception:
+                    pass
+            cameras.append((idx, label))
 
         # Beste (echte) Kamera ermitteln
         configured = self._jarvis.settings.vision_camera_index
         if any(i == configured for i, _ in cameras):
             best = configured
         else:
-            # Automatische Auswahl — Kamera mit hoechster Farbvarianz
-            best = _find_best_camera()
-            if not any(i == best for i, _ in cameras):
-                best = cameras[0][0]
+            best = _find_best_camera(cameras, exclude_virtual=True)
 
         self._active_cam_idx = best
 
+        # Hinweis wenn nur virtuelle Kameras gefunden
+        real_count = sum(1 for _, lbl in cameras if "virtuell" not in lbl.lower() and "obs" not in lbl.lower())
+        if real_count == 0:
+            info = f"Nur virtuelle Kamera(s) gefunden"
+            if win_names:
+                disabled = [n for n in win_names.values() if not _is_virtual_camera(n)]
+                if disabled:
+                    info += f"\n⚠ Deaktiviert: {', '.join(disabled)}\n→ Geräte-Manager → aktivieren"
+        else:
+            info = f"Gefunden: {len(cameras)} Kamera(s)"
+
         # Info-Text + Buttons im Hauptthread aufbauen
-        info = f"Gefunden: {len(cameras)} Kamera(s)"
         if self._win and self._win.winfo_exists():
             self._win.after(0, lambda c=cameras, b=best, t=info:
                 self._build_cam_buttons(c, b, t)
@@ -454,12 +512,25 @@ class CameraWindow:
 
         for i, (idx, label) in enumerate(cameras):
             is_active = (idx == active)
+            is_virtual = "virtuell" in label.lower() or "obs" in label.lower()
+            icon = "🖥" if is_virtual else "📷"
+
+            if is_active:
+                fg = "#0369a1"
+                txt = "#7dd3fc"
+            elif is_virtual:
+                fg = "#1e293b"
+                txt = "#f59e0b"  # Orange fuer virtuelle Kameras
+            else:
+                fg = "#1e293b"
+                txt = "#94a3b8"
+
             btn = ctk.CTkButton(
                 self._cam_btn_frame,
-                text=f"📷 {label}",
-                fg_color="#0369a1" if is_active else "#1e293b",
+                text=f"{icon} {label}",
+                fg_color=fg,
                 hover_color="#0369a1",
-                text_color="#7dd3fc" if is_active else "#94a3b8",
+                text_color=txt,
                 font=ctk.CTkFont(size=11), height=30, corner_radius=6,
                 command=lambda ix=idx: self._switch_camera(ix),
             )
