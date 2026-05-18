@@ -180,7 +180,12 @@ class MemoryStore:
             return []
 
     def _save(self):
-        data = [e.to_dict() for e in self._entries]
+        """Atomisches Schreiben des Memory-Stores auf Disk.
+        BUG-068: Nicht unter self._lock aufrufen — holt intern Lock fuer Snapshot,
+        schreibt Disk-I/O ausserhalb um den Lock nicht zu blockieren.
+        """
+        with self._lock:
+            data = [e.to_dict() for e in self._entries]
         content = json.dumps(data, indent=2, ensure_ascii=False)
         # Atomisches Schreiben: erst in temporäre Datei, dann umbenennen
         tmp = self._file.with_suffix(".tmp")
@@ -239,50 +244,58 @@ class MemoryStore:
 
             entry = MemoryEntry(info, category=cat, priority=5)
             self._entries.append(entry)
-            self._save()
             logger.info(f"Gespeichert [{cat}]: '{info}'")
-            return f"Gespeichert: {info}"
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        self._save()
+        return f"Gespeichert: {info}"
 
     def update(self, search_term: str, new_info: str, category: str = "") -> str:
         """Überschreibt einen vorhandenen Eintrag (Korrektur).
         BUG-023: _maybe_reload() vor der Suche — verhindert TOCTOU wenn Datei
         extern geändert wurde, bevor update() die Suche startet.
         """
+        need_save  = False
+        result_msg = None
         with self._lock:
             self._maybe_reload()   # BUG-023: reload under lock, not just in remember()
             entry = self._find_similar(search_term, cutoff=0.55)
-            if not entry:
-                # Nichts gefunden → neu anlegen (Lock wird freigegeben, remember() holt ihn erneut)
-                pass
-            else:
+            if entry:
                 old_content = entry.content
                 entry.content    = new_info.strip()
                 entry.category   = category if category in VALID_CATEGORIES else entry.category
                 entry.priority   = min(10, entry.priority + 2)   # Korrigierte Einträge = höhere Priorität
                 entry.updated_at = _now()
-                self._save()
+                need_save  = True
                 logger.info(f"Aktualisiert: '{old_content}' → '{new_info}'")
-                return f"Korrigiert: '{old_content}' → '{new_info}'"
+                result_msg = f"Korrigiert: '{old_content}' → '{new_info}'"
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        if need_save:
+            self._save()
+            return result_msg
         # Nichts gefunden → neu anlegen (außerhalb des Locks um Deadlock mit remember() zu vermeiden)
         return self.remember(new_info, category)
 
     def forget(self, search_term: str) -> str:
         """Löscht einen Eintrag (fuzzy)."""
+        found_content = None
         with self._lock:
             entry = self._find_similar(search_term, cutoff=0.55)
             if not entry:
                 return "Diese Information habe ich nicht gespeichert."
+            found_content = entry.content
             self._entries.remove(entry)
-            self._save()
-            logger.info(f"Gelöscht: '{entry.content}'")
-            return f"Vergessen: {entry.content}"
+            logger.info(f"Gelöscht: '{found_content}'")
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        self._save()
+        return f"Vergessen: {found_content}"
 
     def forget_all(self) -> str:
         with self._lock:
             count = len(self._entries)
             self._entries.clear()
-            self._save()
-            return f"Alle {count} Einträge gelöscht."
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        self._save()
+        return f"Alle {count} Einträge gelöscht."
 
     def search(self, query: str) -> str:
         """Sucht Einträge und gibt sie als lesbaren Text zurück."""
@@ -316,6 +329,7 @@ class MemoryStore:
 
     def update_entry(self, entry_id: str, content: str, category: str, priority: int):
         """Direkt-Update aus dem UI (Memory-Fenster)."""
+        need_save = False
         with self._lock:
             e = next((x for x in self._entries if x.id == entry_id), None)
             if e:
@@ -323,21 +337,26 @@ class MemoryStore:
                 e.category   = category
                 e.priority   = max(0, min(10, priority))
                 e.updated_at = _now()
-                self._save()
+                need_save    = True
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        if need_save:
+            self._save()
 
     def delete_entry(self, entry_id: str):
         """Löscht einen Eintrag anhand seiner ID (aus dem UI)."""
         with self._lock:
             self._entries = [e for e in self._entries if e.id != entry_id]
-            self._save()
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        self._save()
 
     def add_entry(self, content: str, category: str, priority: int = 5):
         """Fügt einen neuen Eintrag direkt hinzu (aus dem UI)."""
         with self._lock:
             e = MemoryEntry(content, category=category, priority=priority)
             self._entries.append(e)
-            self._save()
-            return e
+        # BUG-068: _save() ausserhalb des Locks aufrufen
+        self._save()
+        return e
 
     # ──────────────────────────────────────────────────────────────
     # Prompt-Injection (smart, gefiltert)

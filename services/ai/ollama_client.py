@@ -61,7 +61,7 @@ class OllamaClient(GrokClient):
         self._personality       = "assistant"
         self._personality_custom = ""
         self._context_provider  = None    # BUG-025: fehlt sonst in _build_system_prompt
-        self._adaptive_max_tokens: bool = False  # BUG-025
+        self._adaptive_max_tokens = None   # BUG-069: war False (bool), muss None (Optional[int]) sein
         self._noise_filter      = False
         self._long_term_context = False
         self._style_learner     = None

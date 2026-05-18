@@ -167,7 +167,10 @@ class RouterClient:
 
     def get_last_response(self) -> str:
         """Gibt die letzte Assistenten-Antwort aus der History zurück."""
-        for msg in reversed(self._history):
+        # BUG-066: _history_lock halten bei Iteration — Race Condition mit _sync_from()
+        with self._history_lock:
+            history = list(self._history)
+        for msg in reversed(history):
             if msg.get("role") == "assistant":
                 content = msg.get("content", "")
                 if isinstance(content, str) and content.strip():
