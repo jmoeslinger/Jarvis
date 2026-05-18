@@ -10,9 +10,11 @@ Threads:
   after()          sendet jeden Frame sicher in den Tk-Hauptthread
 """
 import base64
+import io
 import logging
 import threading
 import time
+import tkinter as tk
 from typing import List, Optional, Tuple
 
 import customtkinter as ctk
@@ -25,7 +27,7 @@ logger = logging.getLogger("jarvis.camera_win")
 
 def _pil_to_png_bytes(pil_image) -> bytes:
     """Konvertiert ein PIL-Image in PNG-Bytes fuer tk.PhotoImage."""
-    import io
+    # BUG-078: io is now imported at module level — no per-call lookup overhead.
     buf = io.BytesIO()
     pil_image.save(buf, format="PNG")
     return buf.getvalue()
@@ -255,7 +257,7 @@ class CameraWindow:
         left.columnconfigure(0, weight=1)
 
         # tk.Canvas fuer die Kamera-Vorschau — erlaubt korrekte Zentrierung
-        import tkinter as tk
+        # (tkinter already imported at module level — BUG-078 fix)
         self._preview_canvas = tk.Canvas(
             left,
             bg="#1e293b",
@@ -755,6 +757,13 @@ class CameraWindow:
             self._set_status("⚠ OpenCV fehlt", "#ef4444")
             return
 
+        # BUG-078: hoist PIL import out of the 30fps while-loop — avoids
+        # repeated module-dict lookups on every frame.
+        try:
+            from PIL import Image as _PILImage
+        except ImportError:
+            _PILImage = None  # Preview still works without PIL (degraded)
+
         # Kamera oeffnen
         cap = self._open_cap(cv2, cam_idx)
         if cap is None:
@@ -792,11 +801,13 @@ class CameraWindow:
             # PIL-Bild erzeugen und via after() an den Canvas senden
             # BUG-013: kein _light_image-Hack mehr — PIL direkt uebergeben
             # BUG-027: nur EIN pending after()-Call — neuer Frame ersetzt alten
+            # BUG-078: PIL already imported above the loop — no per-frame lookup.
             try:
-                from PIL import Image
+                if _PILImage is None:
+                    raise ImportError("PIL nicht verfuegbar")
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pil = Image.fromarray(rgb)
-                pil.thumbnail((530, 400), Image.LANCZOS)
+                pil = _PILImage.fromarray(rgb)
+                pil.thumbnail((530, 400), _PILImage.LANCZOS)
                 if self._win and self._win.winfo_exists():
                     # Atomisch: altes pending-Flag setzen, neues Bild einreihen
                     self._pending_frame = pil   # BUG-027: letztes Bild merken
@@ -857,7 +868,7 @@ class CameraWindow:
             # BUG-027: Frame verwerfen wenn bereits ein neueres Bild wartet
             if pil_img is not self._pending_frame:
                 return
-            import tkinter as tk
+            # BUG-078: tkinter imported at module level — no per-frame lookup.
             tk_img = tk.PhotoImage(data=_pil_to_png_bytes(pil_img))
             self._canvas_tk_img = tk_img   # GC-Schutz
             self._pending_frame = None

@@ -52,10 +52,14 @@ class ProactiveEngine:
     def start(self):
         if self._running:
             return
+        # BUG-079: create a fresh Event per start() so each loop-thread owns its
+        # own stop signal.  stop() sets self._stop_event, which always points to
+        # the event of the currently running thread — no cross-thread interference.
         self._running = True
-        self._stop_event.clear()
+        stop_ev = threading.Event()
+        self._stop_event = stop_ev
         self._thread = threading.Thread(
-            target=self._loop, daemon=True, name="ProactiveEngine"
+            target=self._loop, args=(stop_ev,), daemon=True, name="ProactiveEngine"
         )
         self._thread.start()
         logger.info("ProactiveEngine gestartet.")
@@ -67,9 +71,14 @@ class ProactiveEngine:
 
     # ── Interner Loop ──────────────────────────────────────────────────────────
 
-    def _loop(self):
+    def _loop(self, stop_ev: threading.Event):
         # Startverzoegerung: erst nach 2 Minuten aktiv werden (BUG-028: unterbrechbar)
-        self._stop_event.wait(timeout=120)
+        # BUG-079: stop_ev is the per-invocation event captured at start() time.
+        # Using a local parameter (not self._stop_event) prevents a rapid
+        # stop()+start() sequence from silently clearing the signal that this
+        # thread is still waiting on — which would have caused two _loop threads
+        # to run simultaneously and fire duplicate suggestions.
+        stop_ev.wait(timeout=120)
         if not self._running:
             return
 
@@ -79,8 +88,9 @@ class ProactiveEngine:
             except Exception as e:
                 logger.debug(f"ProactiveEngine Tick-Fehler: {e}")
             # Alle 5 Minuten pruefen — sofort unterbrechbar (BUG-028)
-            self._stop_event.wait(timeout=300)
-            self._stop_event.clear()
+            # No stop_ev.clear() here: each start() creates a fresh Event, so
+            # there is nothing stale to clear in subsequent iterations.
+            stop_ev.wait(timeout=300)
 
     def _tick(self):
         now = datetime.now()

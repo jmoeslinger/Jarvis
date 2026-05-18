@@ -769,9 +769,11 @@ class GrokClient:
     def _call_streaming(self, on_chunk: Callable[[str], None]) -> str:
         messages = [{"role": "system", "content": self._build_system_prompt()}] + self._trimmed_history()
 
-        # Reaktionszeit: Token-Limit für diesen Request lesen und zurücksetzen
+        # Reaktionszeit: Token-Limit für diesen Request lesen.
+        # BUG-082: Reset erst NACH dem erfolgreichen Erstellen des Streams —
+        # wenn create() wirft, bleibt _adaptive_max_tokens erhalten und
+        # der Fallback-Pfad (chat() → _call()) kann ihn noch anwenden.
         _max_tok = self._adaptive_max_tokens
-        self._adaptive_max_tokens = None   # One-Shot — nach diesem Request zurücksetzen
 
         _create_kwargs: dict = dict(
             model=self._model,
@@ -785,6 +787,8 @@ class GrokClient:
             _create_kwargs["max_tokens"] = _max_tok
 
         stream = self._client.chat.completions.create(**_create_kwargs)
+        # Stream erfolgreich erstellt — jetzt One-Shot-Limit zuruecksetzen
+        self._adaptive_max_tokens = None   # BUG-082: war vor create() — zu frueh
 
         # ── Phase 1: Erst ALLES sammeln, NICHTS sofort sprechen ──────────────
         # Grund: Das Modell gibt manchmal Funktionsnamen ("get_time") als
@@ -1014,13 +1018,24 @@ class GrokClient:
     def _call(self) -> str:
         messages = [{"role": "system", "content": self._build_system_prompt()}] + self._trimmed_history()
 
-        response = self._client.chat.completions.create(
+        # BUG-082: _call() ignorierte _adaptive_max_tokens komplett.
+        # Wird z.B. im Streaming-Fallback (chat_streaming → chat → _call)
+        # benoetigt, wenn _call_streaming() vor create() geworfen hat und
+        # das Limit noch nicht zurueckgesetzt wurde.
+        _max_tok = self._adaptive_max_tokens
+        self._adaptive_max_tokens = None   # One-Shot — nach diesem Request zuruecksetzen
+
+        _call_kwargs: dict = dict(
             model=self._model,
             messages=messages,
             tools=_TOOLS,
             tool_choice="auto",
             timeout=20,
         )
+        if _max_tok is not None:
+            _call_kwargs["max_tokens"] = _max_tok
+
+        response = self._client.chat.completions.create(**_call_kwargs)
 
         msg = response.choices[0].message
 

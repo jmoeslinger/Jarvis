@@ -187,12 +187,18 @@ class ConversationLog:
             return len(self._sessions)
 
     def clear(self):
-        """Löscht alle gespeicherten Gespräche und die Disk-Datei."""
+        """Löscht alle gespeicherten Gespräche und die Disk-Datei.
+        BUG-081: unlink() war unter self._lock — selbes Muster wie BUG-059.
+        Disk-I/O ausserhalb des Locks: verhindert Lock-Blockade und die
+        TOCTOU-Race bei der ein gleichzeitiger _save()-Snapshot (der Lock
+        bereits freigegeben hat) die Datei nach dem unlink() neu anlegt.
+        """
         with self._lock:
             self._sessions.clear()
             self._current_turns.clear()
-            try:
-                self._file.unlink(missing_ok=True)
-            except Exception:
-                pass
+        # BUG-081: unlink ausserhalb des Locks ausfuehren
+        try:
+            self._file.unlink(missing_ok=True)
+        except Exception:
+            pass
         logger.info("ConversationLog vollständig gelöscht.")

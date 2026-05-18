@@ -102,7 +102,13 @@ _BACKUP_FILE = CONFIG_DIR / "memories.backup.json"
 class MemoryStore:
     def __init__(self):
         self._file: Path = _MEMORY_FILE
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()        # guards in-memory _entries
+        # BUG-080: separate lock for disk I/O so two concurrent _save() calls
+        # (e.g. from parallel_tasks running remember_info + update_info at the
+        # same time) cannot interleave writes to the shared .tmp file and
+        # corrupt the stored memory.  _lock is NOT held during disk I/O (BUG-068
+        # pattern) — _save_lock serialises only the write/replace pair.
+        self._save_lock = threading.Lock()
         self._entries: list[MemoryEntry] = self._load()
         self._last_mtime: float = self._file.stat().st_mtime if self._file.exists() else 0.0
         logger.info(f"Memory geladen: {len(self._entries)} Einträge")
@@ -183,22 +189,26 @@ class MemoryStore:
         """Atomisches Schreiben des Memory-Stores auf Disk.
         BUG-068: Nicht unter self._lock aufrufen — holt intern Lock fuer Snapshot,
         schreibt Disk-I/O ausserhalb um den Lock nicht zu blockieren.
+        BUG-080: _save_lock serialisiert die tmp-Schreibphase, damit zwei
+        gleichzeitige _save()-Aufrufe (z.B. durch parallel_tasks) die .tmp-Datei
+        nicht gleichzeitig beschreiben und korrumpieren.
         """
         with self._lock:
             data = [e.to_dict() for e in self._entries]
         content = json.dumps(data, indent=2, ensure_ascii=False)
         # Atomisches Schreiben: erst in temporäre Datei, dann umbenennen
         tmp = self._file.with_suffix(".tmp")
-        try:
-            tmp.write_text(content, encoding="utf-8")
-            tmp.replace(self._file)
-        except Exception:
-            # Fallback: direkt schreiben
+        with self._save_lock:
             try:
-                tmp.unlink(missing_ok=True)
+                tmp.write_text(content, encoding="utf-8")
+                tmp.replace(self._file)
             except Exception:
-                pass
-            self._file.write_text(content, encoding="utf-8")
+                # Fallback: direkt schreiben
+                try:
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                self._file.write_text(content, encoding="utf-8")
         try:
             self._last_mtime = self._file.stat().st_mtime
         except Exception:
