@@ -1,28 +1,36 @@
-# Kern-KI
+# ── Kern-KI ───────────────────────────────────────────────────────────────────
 openai>=1.0.0
 
-# Spracherkennung (kein PyAudio noetig)
+# ── Spracherkennung ───────────────────────────────────────────────────────────
 SpeechRecognition>=3.10.0
 sounddevice>=0.4.6
 soundfile>=0.12.0
 numpy>=1.24.0
 
-# Sprachausgabe
+# ── Sprachausgabe ─────────────────────────────────────────────────────────────
 edge-tts>=6.1.0
 pyttsx3>=2.90
 
-# Internet-Suche
+# ── Internet-Suche ────────────────────────────────────────────────────────────
 ddgs>=0.1.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 
-# Prozessverwaltung
+# ── Prozessverwaltung ─────────────────────────────────────────────────────────
 psutil>=5.9.0
 
-# Globale Tastenkürzel
+# ── Globale Tastenkürzel ──────────────────────────────────────────────────────
 keyboard>=0.13.5
 
-# Benutzeroberfläche
+# ── Benutzeroberfläche ────────────────────────────────────────────────────────
 pystray>=0.19.5
 Pillow>=10.0.0
 customtkinter>=5.2.2
+
+# ── Kamera & Vision (optional — ohne diese Pakete laeuft Jarvis normal weiter) ─
+# pip install opencv-python          # Kamera-Vorschau, Foto- und Video-Aufnahme
+# pip install mediapipe              # Gestensteuerung (v0.3.0+)
+
+# ── Erweiterte optionale Features ────────────────────────────────────────────
+# pip install openwakeword onnxruntime   # Lokales Wake-Word (offline, kein API-Key)
+# pip install resemblyzer               # Sprechererkennung (nur auf eigene Stimme reagieren)

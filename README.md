@@ -8,27 +8,56 @@ The idea was simple: I wanted an assistant that feels like something out of a sc
 
 ## What can Jarvis do?
 
-- **Voice control** — just speak, Jarvis listens (wake word "Hey Jarvis" or hotkey)
-- **AI responses** — powered by Groq (Llama 3.3, fast & free) or locally via Ollama
+### Voice & AI
+- **Voice control** — speak naturally, Jarvis listens (wake word "Hey Jarvis" or configurable hotkey)
+- **AI responses** — powered by Groq (Llama 3.3 / 4, fast & free) or locally via Ollama
+- **Streaming answers** — responses appear and are spoken word by word, no waiting
+- **Multiple commands** — "Open Spotify and then set a timer for 10 minutes"
+- **Interrupt handling** — stops speaking the moment you start talking
+- **Smart pause** — natural speech detection, no premature cut-offs
+- **Whisper mode** — responds even when you speak quietly
+- **Local wake word** — "Hey Jarvis" fully offline, no internet required
+- **Continuous listening** — optional mode: no wake word needed at all
+
+### Memory & Context
+- **Long-term memory** — Jarvis permanently remembers facts, preferences and tasks about you
+- **Long-term context** — summaries of past conversations are included in every request
+- **Conversation resume** — last session is restored on the next start
+- **Style learning** — learns your preferred tone and answer length over time
+- **Adaptive responses** — automatically applies learned style preferences
+
+### PC Control
 - **Open & close apps** — "Open Spotify", "Close Chrome"
-- **Time & date** — "What time is it?"
-- **Web search** — current info, weather, news
+- **Terminal commands** — run Windows commands by voice
+- **Read & write files** — dictate notes, have files read aloud
+- **Read clipboard** — "What did I copy?"
+- **Web search** — current info, weather, news (DuckDuckGo)
 - **YouTube & browser** — "Play Lo-Fi Hip Hop on YouTube"
 - **Set timers** — "Set a timer for 10 minutes"
-- **Read & write files** — dictate notes, have files read aloud
-- **Terminal commands** — run Windows commands by voice
-- **Read clipboard** — "What did I copy?"
-- **Screen analysis** — "What do you see on my screen?"
-- **Memory** — Jarvis permanently remembers information about you
-- **Emotion detection** — responds to your mood in your voice
-- **Speaker recognition** — only reacts to your voice (optional)
-- **Smart pause** — natural speech detection, no premature cut-offs
-- **Interrupt handling** — stops speaking when you start talking
-- **Whisper mode** — responds when you speak quietly (disableable per user)
-- **Multiple commands** — "Open Spotify and then set a timer for 10 minutes"
-- **Local wake word** — "Hey Jarvis" offline, no internet required
 - **Recurring tasks** — automated reminders and scheduled commands
-- **Task queue** — process multiple commands one after another
+- **Task queue** — multiple commands processed one after another
+
+### Vision & Camera (NEW in v0.3.0)
+- **Live camera preview** — real-time webcam feed in the camera window
+- **Screenshot analysis** — "What do you see on my screen?"
+- **Camera photo analysis** — "Look through the camera and describe what you see"
+- **Video analysis** — records a short clip (3 s, 9 frames), stitches them into a grid and sends it to the Vision AI — "What's happening on camera?"
+- **Gesture control** — assign any Jarvis command to a hand gesture (open palm, fist, thumbs up, peace, pointing, rock sign); hold the gesture for ~1.5 s to trigger it; live overlay shows current gesture and progress bar
+- Vision providers: Groq Llama-4 Scout → Google Gemini Flash → Ollama (moondream / llava)
+
+### Personalization
+- **Personality presets** — Assistant, Friend, Butler, Coach, Scientist, or fully custom
+- **Response length** — Short / Normal / Detailed
+- **Response tone** — Formal / Normal / Casual / Technical / Creative
+- **Multi-step reasoning** — step-by-step thinking mode for complex questions
+- **Proactive suggestions** — Jarvis offers suggestions on its own when idle
+- **Day planning** — add and complete daily tasks by voice
+- **Mood-based responses** — tone adapts to detected emotion in your voice
+
+### Privacy & Security
+- **Speaker recognition** — only reacts to your enrolled voice
+- **Emotion detection** — detects mood from audio features
+- **Noise filter** — spectral noise reduction before speech recognition
 
 ---
 
@@ -37,7 +66,7 @@ The idea was simple: I wanted an assistant that feels like something out of a sc
 - Windows 10 / 11
 - Python 3.10 or newer
 - A microphone
-- A free [Groq API key](https://console.groq.com) (for AI responses)
+- A free [Groq API key](https://console.groq.com) (for AI — takes 2 minutes to register)
 - Optional: [Ollama](https://ollama.ai) for fully local AI without internet
 
 ---
@@ -73,11 +102,11 @@ pip install -r requirements.txt
 Jarvis starten.bat
 ```
 
-On first launch a setup dialog opens. Enter your Groq API key there (register for free at [console.groq.com](https://console.groq.com) — takes 2 minutes).
+On first launch a setup dialog opens. Enter your Groq API key there (register for free at [console.groq.com](https://console.groq.com)).
 
 ### 4. Use it
 
-- Press **Ctrl+Shift+J** or say **"Hey Jarvis"** -> Jarvis listens
+- Press **Ctrl+Shift+J** or say **"Hey Jarvis"** → Jarvis listens
 - Say your command
 - Done
 
@@ -85,11 +114,16 @@ On first launch a setup dialog opens. Enter your Groq API key there (register fo
 
 ## Optional Features
 
-| Feature | Additional package | Command |
+| Feature | Additional package | Install command |
 |---|---|---|
+| Camera / Vision | `opencv-python` | `pip install opencv-python` |
+| Gesture control | `mediapipe` | `pip install mediapipe` |
 | Local wake word (offline) | `openwakeword` + `onnxruntime` | `pip install openwakeword onnxruntime` |
 | Speaker recognition | `resemblyzer` | `pip install resemblyzer` |
 | Local AI (no internet) | Ollama | Download at [ollama.ai](https://ollama.ai) |
+| Google Gemini Vision | — | Free API key at [aistudio.google.com](https://aistudio.google.com) |
+
+> All optional features degrade gracefully — if a package is missing, that feature is simply disabled without any crash.
 
 ---
 
@@ -97,16 +131,30 @@ On first launch a setup dialog opens. Enter your Groq API key there (register fo
 
 ```
 Jarvis/
-├── main.py                  # Entry point
-├── config/                  # Settings
-├── core/                    # Core logic (jarvis.py, task_manager.py)
+├── main.py                      # Entry point
+├── config/
+│   └── settings.py              # All user settings (persistent JSON)
+├── core/
+│   ├── jarvis.py                # Core logic, tool registry, state machine
+│   └── task_manager.py          # Task queue with priorities
 ├── services/
-│   ├── ai/                  # AI clients (Groq, Ollama, Router)
-│   ├── speech/              # Speech recognition, TTS, emotions, speaker ID
-│   ├── tools/               # System tools (terminal, files, screenshot)
-│   ├── web/                 # Search, browser control
-│   └── system/              # App launcher, hotkeys, autostart
-├── ui/                      # User interface (HUD, control panel, chat)
+│   ├── ai/                      # AI clients (Groq, Ollama, Router, ProactiveEngine, DayPlanner)
+│   ├── speech/                  # STT, TTS, emotion detector, speaker ID, style learner
+│   ├── memory/                  # Memory store, conversation log
+│   ├── tools/                   # System tools (terminal, files, screenshot, clipboard)
+│   ├── vision/
+│   │   ├── camera.py            # Webcam capture (photo + video frames)
+│   │   ├── vision_client.py     # Vision AI (Groq / Gemini / Ollama), video grid analysis
+│   │   └── gesture_recognizer.py# Hand gesture detection via MediaPipe (NEW v0.3.0)
+│   ├── web/                     # DuckDuckGo search, browser control
+│   └── system/                  # App launcher, hotkeys, autostart
+├── ui/
+│   ├── hud.py                   # Floating HUD overlay
+│   ├── control_panel.py         # Main settings & control window
+│   ├── camera_window.py         # Camera preview, vision analysis, gesture config
+│   ├── memory_window.py         # Memory manager
+│   ├── tray.py                  # System tray icon
+│   └── setup_dialog.py          # First-launch wizard
 └── requirements.txt
 ```
 
@@ -114,20 +162,21 @@ Jarvis/
 
 ## API Keys & Privacy
 
-- Your **Groq API key** is stored locally in `%APPDATA%\Jarvis\settings.json` and never uploaded anywhere
+- Your **Groq API key** is stored locally in `%APPDATA%\Jarvis\config.json` — never uploaded anywhere
 - Voice recordings are sent **directly** to the Groq API (Whisper) for transcription — only when you speak
 - Jarvis itself collects **no** usage data and sends **no** telemetry
-- Memory (Memories) is stored locally at `%APPDATA%\Jarvis\memories.json`
-- If you don't want to use Groq: set up Ollama as a fully local alternative
+- Memory is stored locally at `%APPDATA%\Jarvis\memories.json`
+- If you don't want to use any cloud: set up Ollama as a fully local alternative
 
 ---
 
 ## Known Limitations
 
-- Some voice commands may be misunderstood by the model — speak clearly and directly
-- The wake word "Hey Jarvis" works best in a quiet environment
+- Some voice commands may be misunderstood — speak clearly and directly
+- The wake word works best in a quiet environment
 - Local wake word requires `openwakeword` to be installed separately
-- Jarvis may require admin rights for certain terminal commands
+- Gesture control requires `mediapipe` and a working webcam
+- Some terminal commands may require admin rights
 
 ---
 
@@ -136,7 +185,7 @@ Jarvis/
 | Name | GitHub | Role |
 |------|--------|------|
 | Jakub Möslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator & Lead Developer |
-| Claude (Anthropic) | — | Autonomous debugging (v0.1.10–v0.2.0) |
+| Claude (Anthropic) | — | Autonomous debugging & feature development (v0.1.10 – v0.3.0) |
 
 Full list: [CONTRIBUTORS.md](CONTRIBUTORS.md)
 
@@ -152,7 +201,8 @@ By using Jarvis you agree to the [Terms of Use](TERMS.md).
 
 ## Acknowledgements
 
-- [Groq](https://groq.com) — lightning-fast LLM inference, free
+- [Groq](https://groq.com) — lightning-fast LLM inference, free tier available
+- [MediaPipe](https://developers.google.com/mediapipe) — hand gesture recognition (Google)
 - [OpenWakeWord](https://github.com/dscripka/openWakeWord) — local wake word detection
 - [Resemblyzer](https://github.com/resemble-ai/Resemblyzer) — speaker recognition
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern GUI
@@ -160,4 +210,16 @@ By using Jarvis you agree to the [Terms of Use](TERMS.md).
 
 ---
 
-*Version v0.2.1 — built with too much coffee and too little sleep*
+## Changelog
+
+| Version | Highlights |
+|---------|-----------|
+| **v0.3.0** | Video analysis, gesture control (MediaPipe), camera grid collage |
+| v0.2.8 | Thread-safety fixes: atomic settings save, DDG search hang, HUD connectivity thread |
+| v0.2.x | Day planner, recurring tasks, adaptive responses, style learning, noise filter, personality presets, multi-step reasoning, conversation resume, long-term context |
+| v0.2.0 | Camera/Vision feature, screenshot & camera analysis, Gemini support |
+| v0.1.x | Initial release: voice control, Groq AI, memory, timers, web search, app control |
+
+---
+
+*Version v0.3.0 — built with too much coffee and too little sleep*
