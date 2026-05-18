@@ -89,6 +89,12 @@ class ControlPanel:
         # BUG-022: Verhindert mehrere parallele Retry-Ketten in show()
         self._show_pending = False
 
+        # Debounce / Throttle: verhindert Scroll-Lag durch akkumulierte after(0)-Callbacks
+        self._settings_refresh_id: Optional[str] = None   # after()-ID fuer Settings-Debounce
+        self._task_update_id:      Optional[str] = None   # after()-ID fuer Task-Throttle
+        self._state_update_id:     Optional[str] = None   # after()-ID fuer State-Debounce
+        self._pending_state = None                         # letzter State fuer State-Debounce
+
         self._jarvis.on_state_change(self._on_state)
         self._jarvis.on_message(self._on_message)
         self._jarvis.on_task_update(self._on_task_update)
@@ -832,8 +838,22 @@ class ControlPanel:
     # ── Live-Updates (thread-safe) ────────────────────────────────────────────
 
     def _on_state(self, state: State):
-        if self._hud_root:
-            self._hud_root.after(0, self._update_state_ui, state)
+        """Debounced (80 ms): schnell aufeinanderfolgende State-Wechsel werden zusammengefasst."""
+        if not self._hud_root:
+            return
+        self._pending_state = state
+        if self._state_update_id is not None:
+            try:
+                self._hud_root.after_cancel(self._state_update_id)
+            except Exception:
+                pass
+        self._state_update_id = self._hud_root.after(80, self._do_state_update)
+
+    def _do_state_update(self):
+        self._state_update_id = None
+        if self._pending_state is not None:
+            self._update_state_ui(self._pending_state)
+            self._pending_state = None
 
     def _update_state_ui(self, state: State):
         if not (self._win and self._win.winfo_exists()):
@@ -905,9 +925,19 @@ class ControlPanel:
         ).start()
 
     def _on_task_update(self, task_list: List):
-        """Callback vom TaskManager — UI im Hauptthread aktualisieren."""
-        if self._hud_root:
-            self._hud_root.after(0, self._update_task_ui, task_list)
+        """Callback vom TaskManager — throttled (max. 5×/s) um Scroll-Lag zu vermeiden.
+        Wenn bereits ein Update geplant ist, wird kein weiterer after()-Aufruf geplant.
+        """
+        if not self._hud_root:
+            return
+        if self._task_update_id is not None:
+            return   # bereits ein Update in 200 ms geplant — einfach warten
+        self._task_update_id = self._hud_root.after(200, self._do_task_update)
+
+    def _do_task_update(self):
+        """Fuehrt das Task-UI-Update aus und gibt den Throttle frei."""
+        self._task_update_id = None
+        self._update_task_ui([])
 
     def _update_task_ui(self, task_list: List):
         """Aktualisiert die Task-Queue-Anzeige. Läuft im Hauptthread."""
@@ -1218,12 +1248,26 @@ class ControlPanel:
             btn.configure(fg_color="#134e4a" if active else "#1e293b")
 
     def _on_settings_changed(self):
-        """Callback: Settings wurden geändert — alle betroffenen Buttons aktualisieren."""
-        if self._hud_root:
-            self._hud_root.after(0, self._refresh_hoehmodus_buttons)
-            self._hud_root.after(0, self._refresh_analyse_buttons)
-            self._hud_root.after(0, self._refresh_adaption_buttons)
-            self._hud_root.after(0, self._refresh_vision_buttons)
+        """Callback: Settings wurden geändert — debounced (150 ms) um Scroll-Lag zu vermeiden.
+        Mehrere schnell aufeinanderfolgende Aufrufe werden zu einem einzigen UI-Update zusammengefasst.
+        """
+        if not self._hud_root:
+            return
+        # Ausstehenden Refresh abbrechen und neu planen
+        if self._settings_refresh_id is not None:
+            try:
+                self._hud_root.after_cancel(self._settings_refresh_id)
+            except Exception:
+                pass
+        self._settings_refresh_id = self._hud_root.after(150, self._do_settings_refresh)
+
+    def _do_settings_refresh(self):
+        """Fuehrt alle Button-Refreshes in einem einzigen Mainloop-Tick durch."""
+        self._settings_refresh_id = None
+        self._refresh_hoehmodus_buttons()
+        self._refresh_analyse_buttons()
+        self._refresh_adaption_buttons()
+        self._refresh_vision_buttons()
 
     def _refresh_hoehmodus_buttons(self):
         """Aktualisiert die Hörmodus-Button-Farben anhand der aktuellen Settings."""
