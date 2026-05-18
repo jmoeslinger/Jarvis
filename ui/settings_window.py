@@ -284,6 +284,100 @@ class SettingsWindow:
             font=ctk.CTkFont(size=11), text_color="#333355",
         ).pack(anchor="w", padx=20, pady=(0, 16))
 
+        # ── Abschnitt: Lern & Adaption ────────────────────────────────
+        self._section(scroll, "Lern & Adaption")
+        adapt_card = self._card(scroll)
+
+        self._noise_filter_var = ctk.BooleanVar(value=self._settings.noise_filter)
+        ctk.CTkCheckBox(
+            adapt_card,
+            text="Geräuschfilter — Hintergrundgeräusche reduzieren",
+            variable=self._noise_filter_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(14, 4))
+        ctk.CTkLabel(
+            adapt_card,
+            text="Spektrale Subtraktion vor der Spracherkennung (laute Umgebungen)",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._long_term_ctx_var = ctk.BooleanVar(value=self._settings.long_term_context)
+        ctk.CTkCheckBox(
+            adapt_card,
+            text="Langzeit-Kontext — frühere Gespräche einbeziehen",
+            variable=self._long_term_ctx_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+        ctk.CTkLabel(
+            adapt_card,
+            text="Jarvis erinnert sich an Themen aus früheren Sitzungen",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._conv_resume_var = ctk.BooleanVar(value=self._settings.conversation_resume)
+        ctk.CTkCheckBox(
+            adapt_card,
+            text="Gespräch fortsetzen — beim Start an letztes Gespräch anknüpfen",
+            variable=self._conv_resume_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+        ctk.CTkLabel(
+            adapt_card,
+            text="Lädt die letzten Nachrichten der vorherigen Session in den Verlauf",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._style_learning_var = ctk.BooleanVar(value=self._settings.style_learning)
+        ctk.CTkCheckBox(
+            adapt_card,
+            text="Sprachstil lernen — Ton und Länge automatisch anpassen",
+            variable=self._style_learning_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+        ctk.CTkLabel(
+            adapt_card,
+            text="Analysiert deine Befehle und lernt deinen bevorzugten Stil",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._adapt_time_var = ctk.BooleanVar(value=self._settings.adaptive_response_time)
+        ctk.CTkCheckBox(
+            adapt_card,
+            text="Reaktionszeit anpassen — schneller bei kurzen Befehlen",
+            variable=self._adapt_time_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+        ctk.CTkLabel(
+            adapt_card,
+            text="Kürzeres Token-Limit für einfache Befehle (Timer, Apps öffnen…)",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._adapt_resp_var = ctk.BooleanVar(value=self._settings.adaptive_responses)
+        ctk.CTkCheckBox(
+            adapt_card,
+            text="Adaptive Antworten — Verhalten dynamisch anpassen",
+            variable=self._adapt_resp_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+        ctk.CTkLabel(
+            adapt_card,
+            text="Wendet gelernte Stil-Präferenzen automatisch an (ab 15 Befehlen)",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 16))
+
         # ── Fehler & Speichern ────────────────────────────────────────
         self._err_lbl = ctk.CTkLabel(
             self._root, text="", text_color="#FF4455",
@@ -482,8 +576,14 @@ class SettingsWindow:
         self._settings.tts_rate           = rate_str
         self._settings.autostart_enabled  = self._autostart_var.get()
         self._settings.input_device       = input_device
-        self._settings.whisper_mode       = self._whisper_var.get()
-        self._settings.multi_command      = self._multi_cmd_var.get()
+        self._settings.whisper_mode             = self._whisper_var.get()
+        self._settings.multi_command            = self._multi_cmd_var.get()
+        self._settings.noise_filter             = self._noise_filter_var.get()
+        self._settings.long_term_context        = self._long_term_ctx_var.get()
+        self._settings.conversation_resume      = self._conv_resume_var.get()
+        self._settings.style_learning           = self._style_learning_var.get()
+        self._settings.adaptive_response_time   = self._adapt_time_var.get()
+        self._settings.adaptive_responses       = self._adapt_resp_var.get()
         self._settings.save()
 
         # Live anwenden
@@ -522,8 +622,14 @@ class SettingsWindow:
             try:
                 self._jarvis.set_whisper_mode(self._settings.whisper_mode)
                 self._jarvis.set_multi_command(self._settings.multi_command)
+                self._jarvis.set_noise_filter(self._settings.noise_filter)
+                self._jarvis.set_long_term_context(self._settings.long_term_context)
+                self._jarvis.set_conversation_resume(self._settings.conversation_resume)
+                self._jarvis.set_style_learning(self._settings.style_learning)
+                self._jarvis.set_adaptive_response_time(self._settings.adaptive_response_time)
+                self._jarvis.set_adaptive_responses(self._settings.adaptive_responses)
             except Exception as e:
-                logger.error(f"Sprach-Features Fehler: {e}")
+                logger.error(f"Feature-Settings Fehler: {e}")
 
         autostart = Autostart()
         if self._settings.autostart_enabled:

@@ -107,7 +107,11 @@ class JarvisCore:
 
         logger.info("Initialisiere Dienste...")
         from services.memory.memory_store import MemoryStore
-        self.memory = MemoryStore()
+        from services.memory.conversation_log import ConversationLog
+        from services.memory.style_learner import StyleLearner
+        self.memory           = MemoryStore()
+        self.conversation_log = ConversationLog()
+        self.style_learner    = StyleLearner()
 
         whisper_base = (
             "https://api.groq.com/openai/v1"
@@ -178,9 +182,21 @@ class JarvisCore:
         if settings.smart_pause:
             self.recognizer.smart_pause = True
 
+        # Geräuschfilter
+        if settings.noise_filter:
+            self.recognizer.noise_filter = True
+
         # SpeakerIdentifier initialisieren falls aktiviert
         if settings.speaker_recognition:
             self._init_speaker_id(silent=True)
+
+        # Langzeit-Kontext: ConversationLog als Context-Provider registrieren
+        if settings.long_term_context:
+            self.grok.set_context_provider(self.conversation_log.get_context_string)
+
+        # Adaptive Antworten: Stil-Präferenzen aus StyleLearner anwenden
+        if settings.adaptive_responses and self.style_learner.get_total_commands() >= 15:
+            self._apply_style_preferences()
 
         # Escape-Taste zum Stoppen
         try:
@@ -217,6 +233,19 @@ class JarvisCore:
         self._set_state(State.WAKE_LISTENING)
         self._start_bg_listen()
         logger.info("Jarvis hoert auf Wake-Word.")
+
+        # Gespräch fortsetzen: letzte Session in Chat-History laden
+        if self.settings.conversation_resume:
+            history = self.conversation_log.get_last_session_history()
+            if history:
+                # RouterClient-History und alle Provider-Clients synchron setzen
+                self.grok._history = list(history)
+                for _, client in self.grok._providers:
+                    client._history = list(history)
+                turns = len(history) // 2
+                self._notify("system", f"🔄 Gespräch fortgesetzt ({turns} Turns geladen)")
+                logger.info(f"Gespräch fortgesetzt: {len(history)} History-Einträge")
+
         # Im Hintergrundmodus kein Startup-Sound
         if not self.settings.background_mode:
             self.synthesizer.speak_async("Jarvis bereit.")
@@ -226,6 +255,11 @@ class JarvisCore:
         self._cancel_streaming.set()        # laufendes Streaming stoppen
         self.task_manager.stop()            # TaskManager Worker beenden
         self._stop_bg_listen_safe()
+        # Gesprächs-Log persistent speichern
+        try:
+            self.conversation_log.flush()
+        except Exception:
+            pass
         # Alle ausstehenden Timer abbrechen damit sie nach dem Stop nicht noch feuern
         for t in self._active_timers:
             try:
@@ -452,6 +486,94 @@ class JarvisCore:
         self._fire_settings_changed()
         self._notify("system", f"📋 Mehrfachbefehle: {'AN' if enabled else 'AUS'}")
 
+    def set_noise_filter(self, enabled: bool):
+        """
+        Schaltet den Geräuschfilter ein/aus.
+        Wenn aktiv: spektrale Subtraktion reduziert stationäres Hintergrundgeräusch
+        vor der Übertragung an Whisper — verbessert STT-Qualität in lauten Umgebungen.
+        """
+        self.settings.noise_filter = enabled
+        self.settings.save()
+        self.recognizer.noise_filter = enabled
+        self._fire_settings_changed()
+        self._notify("system", f"🔇 Geräuschfilter: {'AN' if enabled else 'AUS'}")
+
+    def set_long_term_context(self, enabled: bool):
+        """
+        Schaltet den Langzeit-Kontext ein/aus.
+        Wenn aktiv: Zusammenfassungen vergangener Gespräche werden in den
+        System-Prompt eingebettet — die KI erinnert sich sitzungsübergreifend.
+        """
+        self.settings.long_term_context = enabled
+        self.settings.save()
+        if enabled:
+            self.grok.set_context_provider(self.conversation_log.get_context_string)
+        else:
+            self.grok.set_context_provider(None)
+        self._fire_settings_changed()
+        sessions = self.conversation_log.get_session_count()
+        status = f"{sessions} Sessions gespeichert" if sessions else "noch keine Sessions"
+        self._notify("system", f"🧠 Langzeit-Kontext: {'AN' if enabled else 'AUS'} ({status})")
+
+    def set_conversation_resume(self, enabled: bool):
+        """
+        Schaltet 'Gespräch fortsetzen' ein/aus.
+        Wenn aktiv: beim nächsten Start von Jarvis werden die letzten Nachrichten
+        der vorherigen Session in den Chat-Verlauf geladen.
+        """
+        self.settings.conversation_resume = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        self._notify("system", f"🔄 Gespräch fortsetzen: {'AN' if enabled else 'AUS'}")
+
+    def set_style_learning(self, enabled: bool):
+        """
+        Schaltet das Sprachstil-Lernen ein/aus.
+        Wenn aktiv: Jarvis analysiert jeden Befehl und lernt Ton und bevorzugte
+        Antwortlänge. Bei 'Adaptive Antworten' werden diese automatisch angewendet.
+        """
+        self.settings.style_learning = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        n = self.style_learner.get_total_commands()
+        status = f"{n} Commands gelernt" if n else "noch kein Profil"
+        self._notify("system", f"📚 Sprachstil lernen: {'AN' if enabled else 'AUS'} ({status})")
+
+    def set_adaptive_response_time(self, enabled: bool):
+        """
+        Schaltet die adaptive Reaktionszeit ein/aus.
+        Wenn aktiv: einfache kurze Befehle (Timer, App öffnen, Uhrzeit…) erhalten
+        ein niedrigeres Token-Limit → kürzere, schnellere Antwort.
+        Komplexe Fragen werden weiterhin vollständig beantwortet.
+        """
+        self.settings.adaptive_response_time = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        self._notify("system", f"⚡ Reaktionszeit anpassen: {'AN' if enabled else 'AUS'}")
+
+    def set_adaptive_responses(self, enabled: bool):
+        """
+        Schaltet adaptive Antworten ein/aus.
+        Kombiniert: Stil-Lernen + automatische Anwendung der gelernten Präferenzen.
+        Wenn aktiv: Ton und Länge werden aus dem Style-Profil abgeleitet und
+        automatisch in GrokClient übernommen — ohne manuelle Einstellung nötig.
+        """
+        self.settings.adaptive_responses = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        if enabled and self.style_learner.get_total_commands() >= 15:
+            self._apply_style_preferences()
+            length = self.style_learner.get_preferred_length()
+            tone   = self.style_learner.get_preferred_tone()
+            self._notify("system",
+                f"🎯 Adaptive Antworten: AN (Länge: {length}, Ton: {tone})")
+        else:
+            n = self.style_learner.get_total_commands()
+            needed = max(0, 15 - n)
+            self._notify("system",
+                f"🎯 Adaptive Antworten: {'AN' if enabled else 'AUS'}"
+                + (f" — noch {needed} Commands zum Lernen nötig" if enabled and needed > 0 else ""))
+
     def enroll_speaker(self, duration_s: float = 6.0) -> bool:
         """
         Nimmt eine Stimmprobe auf und erstellt das Sprecher-Profil.
@@ -580,6 +702,13 @@ class JarvisCore:
         self._notify("system", "✋ Unterbrochen")
         self._interrupt_active.clear()
 
+        # Unterbrechung dem StyleLearner melden (für Antwortlängen-Anpassung)
+        if self.settings.style_learning:
+            try:
+                self.style_learner.record_interrupt()
+            except Exception:
+                pass
+
         if not self._running:
             return
 
@@ -626,6 +755,61 @@ class JarvisCore:
         except Exception as exc:
             logger.debug(f"Emotion-Hint: {exc}")
         return command
+
+    def _apply_style_preferences(self):
+        """
+        Übernimmt die vom StyleLearner gelernten Präferenzen in GrokClient.
+        Wird beim Aktivieren von 'Adaptive Antworten' und nach jedem Lernschritt aufgerufen.
+        """
+        length = self.style_learner.get_preferred_length()
+        tone   = self.style_learner.get_preferred_tone()
+        self.grok.set_length_hint(_LENGTH_HINTS.get(length, ""))
+        self.grok.set_tone(_TONE_HINTS.get(tone, ""))
+        logger.debug(f"Style-Präferenzen angewendet: Länge={length}, Ton={tone}")
+
+    def _classify_complexity(self, command: str) -> str:
+        """
+        Klassifiziert die Komplexität eines Befehls: 'simple', 'normal' oder 'complex'.
+        Wird von 'Reaktionszeit anpassen' genutzt um max_tokens zu setzen.
+
+        Simple  → kurze Aktionsbefehle, Faktenabfragen
+        Normal  → mittlere Komplexität
+        Complex → Erklärungen, technische Fragen, mehrstufige Aufgaben
+        """
+        import re as _re
+        text = command.lower().strip()
+        # System-Hints herausfiltern
+        if text.startswith("["):
+            end = text.find("]")
+            if end != -1:
+                text = text[end + 1:].strip()
+
+        words = text.split()
+        wc    = len(words)
+
+        # Direkte Aktionsverben → einfach (wenn Befehl kurz)
+        _SIMPLE_STARTS = (
+            "öffne", "starte", "schließe", "spiel", "zeig", "sag mir",
+            "was ist", "wer ist", "wie spät", "wieviel uhr", "uhrzeit",
+            "timer", "erinnere", "beende", "stoppe", "suche nach",
+            "öffne mal", "mach", "spiele",
+        )
+        # Komplexitätsindikatoren → komplex
+        _COMPLEX = (
+            "erkläre", "warum", "wie funktioniert", "was bedeutet",
+            "vergleiche", "analysiere", "schreibe", "erstelle",
+            "berechne", "löse", "schritt für schritt", "ausführlich",
+            "im detail", "zusammenfasse", "übersetze", "generiere",
+            "entwickle", "plane", "entwirf",
+        )
+
+        if wc <= 3:
+            return "simple"
+        if any(text.startswith(s) for s in _SIMPLE_STARTS) and wc <= 7:
+            return "simple"
+        if any(m in text for m in _COMPLEX) or wc >= 16:
+            return "complex"
+        return "normal"
 
     def _apply_whisper_hint(self, command: str) -> str:
         """
@@ -1185,6 +1369,32 @@ class JarvisCore:
         self._set_state(State.PROCESSING)
         self._last_command = command
         logger.info(f"Verarbeite: '{command}'")
+
+        # ── Sprachstil lernen ─────────────────────────────────────────────────
+        if self.settings.style_learning:
+            try:
+                self.style_learner.learn_command(command)
+                # Adaptive Antworten: Präferenzen nach jeweils 5 neuen Commands anwenden
+                if (
+                    self.settings.adaptive_responses
+                    and self.style_learner.get_total_commands() >= 15
+                    and self.style_learner.get_total_commands() % 5 == 0
+                ):
+                    self._apply_style_preferences()
+            except Exception as _sl_err:
+                logger.debug(f"StyleLearner Fehler: {_sl_err}")
+
+        # ── Reaktionszeit anpassen: Token-Limit setzen ────────────────────────
+        if self.settings.adaptive_response_time:
+            try:
+                complexity = self._classify_complexity(command)
+                if complexity == "simple":
+                    self.grok.set_adaptive_max_tokens(120)
+                    logger.debug("Reaktionszeit: simple → max_tokens=120")
+                else:
+                    self.grok.set_adaptive_max_tokens(None)   # kein Limit
+            except Exception as _rt_err:
+                logger.debug(f"Reaktionszeit Fehler: {_rt_err}")
         pipeline = None
         try:
             accumulated_text = ""
@@ -1236,6 +1446,13 @@ class JarvisCore:
                 pipeline.feed(chunk)
 
             full_response = self.grok.chat_streaming(command, on_chunk)
+
+            # ── Gesprächs-Log speichern (Langzeit-Kontext / Gespräch fortsetzen) ──
+            if full_response and not was_cancelled:
+                try:
+                    self.conversation_log.save_turn(command, full_response)
+                except Exception as _log_err:
+                    logger.debug(f"ConversationLog Fehler: {_log_err}")
 
             if was_cancelled:
                 self.synthesizer.stop()   # stoppt Pipeline und setzt Flags unter Lock

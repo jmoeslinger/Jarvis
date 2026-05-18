@@ -390,6 +390,32 @@ class ControlPanel:
         )
         self._refresh_enroll_ui()
 
+        # ── LERN & ADAPTION ───────────────────────────────────────────────────────
+        self._section(body, "LERN & ADAPTION")
+
+        _ADAPTION_MODES = [
+            ("🔇   Geräuschfilter",          "noise_filter"),
+            ("🧠   Langzeit-Kontext",         "long_term_context"),
+            ("🔄   Gespräch fortsetzen",      "conversation_resume"),
+            ("📚   Sprachstil lernen",         "style_learning"),
+            ("⚡   Reaktionszeit anpassen",    "adaptive_response_time"),
+            ("🎯   Adaptive Antworten",        "adaptive_responses"),
+        ]
+        self._adaption_btns: dict = {}
+        for lbl, key in _ADAPTION_MODES:
+            active = getattr(self._jarvis.settings, key, False)
+            btn = ctk.CTkButton(
+                body, text=lbl,
+                fg_color="#4c1d95" if active else "#1e293b",
+                hover_color="#4c1d95",
+                text_color="#e2e8f0",
+                font=ctk.CTkFont(family="Segoe UI", size=13),
+                height=40, corner_radius=8, anchor="w",
+                command=lambda k=key: self._toggle_adaption(k),
+            )
+            btn.pack(fill="x", pady=2)
+            self._adaption_btns[key] = btn
+
         # ── HÖRMODUS ─────────────────────────────────────────────────────────────
         self._section(body, "HÖRMODUS")
 
@@ -998,11 +1024,46 @@ class ControlPanel:
         if fn:
             threading.Thread(target=fn, args=(new_val,), daemon=True).start()
 
+    # ── Lern & Adaption ───────────────────────────────────────────────────────
+
+    def _toggle_adaption(self, key: str):
+        """Schaltet einen Lern-&-Adaption-Toggle um."""
+        s       = self._jarvis.settings
+        new_val = not getattr(s, key, False)
+
+        # Optimistic UI-Update
+        if key in self._adaption_btns:
+            self._adaption_btns[key].configure(
+                fg_color="#4c1d95" if new_val else "#1e293b"
+            )
+
+        dispatch = {
+            "noise_filter":           self._jarvis.set_noise_filter,
+            "long_term_context":      self._jarvis.set_long_term_context,
+            "conversation_resume":    self._jarvis.set_conversation_resume,
+            "style_learning":         self._jarvis.set_style_learning,
+            "adaptive_response_time": self._jarvis.set_adaptive_response_time,
+            "adaptive_responses":     self._jarvis.set_adaptive_responses,
+        }
+        fn = dispatch.get(key)
+        if fn:
+            threading.Thread(target=fn, args=(new_val,), daemon=True).start()
+
+    def _refresh_adaption_buttons(self):
+        """Aktualisiert die Lern-&-Adaption-Buttons anhand der Settings."""
+        if not (self._win and self._win.winfo_exists()):
+            return
+        s = self._jarvis.settings
+        for key, btn in self._adaption_btns.items():
+            active = getattr(s, key, False)
+            btn.configure(fg_color="#4c1d95" if active else "#1e293b")
+
     def _on_settings_changed(self):
         """Callback: Settings wurden geändert — alle betroffenen Buttons aktualisieren."""
         if self._hud_root:
             self._hud_root.after(0, self._refresh_hoehmodus_buttons)
             self._hud_root.after(0, self._refresh_analyse_buttons)
+            self._hud_root.after(0, self._refresh_adaption_buttons)
 
     def _refresh_hoehmodus_buttons(self):
         """Aktualisiert die Hörmodus-Button-Farben anhand der aktuellen Settings."""

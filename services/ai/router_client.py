@@ -145,6 +145,18 @@ class RouterClient:
             if hasattr(client, "set_parallel_tasks"):
                 client.set_parallel_tasks(enabled)
 
+    def set_context_provider(self, provider):
+        """Setzt den Langzeit-Kontext-Provider für alle Provider."""
+        for _, client in self._providers:
+            if hasattr(client, "set_context_provider"):
+                client.set_context_provider(provider)
+
+    def set_adaptive_max_tokens(self, max_tokens):
+        """Setzt das Token-Limit (One-Shot) für alle Provider."""
+        for _, client in self._providers:
+            if hasattr(client, "set_adaptive_max_tokens"):
+                client.set_adaptive_max_tokens(max_tokens)
+
     def get_last_response(self) -> str:
         """Gibt die letzte Assistenten-Antwort aus der History zurück."""
         for msg in reversed(self._history):

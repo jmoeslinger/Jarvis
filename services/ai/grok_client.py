@@ -414,6 +414,8 @@ class GrokClient:
         self._multi_step: bool = False      # Schritt-für-Schritt Reasoning
         self._task_planning: bool = False   # Aufgaben in Schritte zerlegen
         self._parallel_tasks: bool = False  # Tools parallel ausführen
+        self._context_provider: Optional[Callable] = None  # Langzeit-Kontext Provider
+        self._adaptive_max_tokens: Optional[int] = None    # Reaktionszeit: Token-Limit
 
     def set_length_hint(self, hint: str):
         """Setzt den Längenhinweis für zukünftige Antworten."""
@@ -434,6 +436,23 @@ class GrokClient:
     def set_parallel_tasks(self, enabled: bool):
         """Aktiviert/deaktiviert parallele Tool-Ausführung."""
         self._parallel_tasks = enabled
+
+    def set_context_provider(self, provider: Optional[Callable]):
+        """
+        Setzt einen Callable der einen Langzeit-Kontext-String zurückgibt.
+        Wird in _build_system_prompt() eingebettet (Langzeit-Kontext Feature).
+        None = Feature deaktiviert.
+        """
+        self._context_provider = provider
+
+    def set_adaptive_max_tokens(self, max_tokens: Optional[int]):
+        """
+        Setzt das Token-Limit für die nächste Antwort.
+        None = kein Limit (Standard). Wird pro Request gesetzt und dann
+        auf None zurückgesetzt (One-Shot — kein permanentes Limit).
+        Verwendung: Reaktionszeit anpassen (kurze Befehle → weniger Tokens).
+        """
+        self._adaptive_max_tokens = max_tokens
 
     def _build_system_prompt(self) -> str:
         """Baut den System-Prompt dynamisch — kombiniert Basis, Modus-Hinweise und Memory."""
@@ -472,6 +491,15 @@ class GrokClient:
             mem = self._get_memories(self._current_query)
             if mem:
                 prompt += mem
+
+        # Langzeit-Kontext: vergangene Gespräche einbetten
+        if self._context_provider:
+            try:
+                ctx = self._context_provider()
+                if ctx:
+                    prompt += ctx
+            except Exception:
+                pass
 
         return prompt
 
@@ -598,7 +626,11 @@ class GrokClient:
     def _call_streaming(self, on_chunk: Callable[[str], None]) -> str:
         messages = [{"role": "system", "content": self._build_system_prompt()}] + self._trimmed_history()
 
-        stream = self._client.chat.completions.create(
+        # Reaktionszeit: Token-Limit für diesen Request lesen und zurücksetzen
+        _max_tok = self._adaptive_max_tokens
+        self._adaptive_max_tokens = None   # One-Shot — nach diesem Request zurücksetzen
+
+        _create_kwargs: dict = dict(
             model=self._model,
             messages=messages,
             tools=_TOOLS,
@@ -606,6 +638,10 @@ class GrokClient:
             stream=True,
             timeout=30,
         )
+        if _max_tok is not None:
+            _create_kwargs["max_tokens"] = _max_tok
+
+        stream = self._client.chat.completions.create(**_create_kwargs)
 
         # ── Phase 1: Erst ALLES sammeln, NICHTS sofort sprechen ──────────────
         # Grund: Das Modell gibt manchmal Funktionsnamen ("get_time") als

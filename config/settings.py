@@ -50,6 +50,12 @@ class Settings:
     interrupt_handling: bool = False    # TTS bei Benutzer-Unterbrechung sofort stoppen
     whisper_mode: bool = True           # Reagiert auf Flüstersprache (leise Stimme)
     multi_command: bool = False         # Mehrere Befehle in einem Satz verarbeiten
+    noise_filter: bool = False          # Spektrale Rauschunterdrückung vor STT
+    long_term_context: bool = False     # Frühere Gespräche als KI-Kontext einbeziehen
+    conversation_resume: bool = False   # Letzte Session beim Start wiederherstellen
+    style_learning: bool = False        # Sprachstil lernen und Ton/Länge auto-anpassen
+    adaptive_response_time: bool = False  # max_tokens je Befehlskomplexität anpassen
+    adaptive_responses: bool = False    # Adaptives Verhalten (Stil + Reaktionszeit)
 
     # Wiederholende Tasks — gespeichert als Liste von Dicts:
     # [{id, label, interval_minutes, command}, ...]

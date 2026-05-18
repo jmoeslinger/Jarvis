@@ -27,6 +27,76 @@ def _rms_db(samples: np.ndarray) -> float:
     return 20.0 * np.log10(max(rms, 1.0))
 
 
+def _denoise_spectral(
+    samples_1d: np.ndarray,
+    noise_1d: np.ndarray,
+    strength: float = 1.0,
+) -> np.ndarray:
+    """
+    Spektrale Subtraktion — reduziert stationäres Hintergrundrauschen.
+
+    samples_1d : int16 1D-Array des aufgenommenen Sprach-Audios
+    noise_1d   : int16 1D-Array des kalibrierten Umgebungsgeräusches
+    strength   : Subtraktionsstärke (1.0 = ausgewogen, >1.5 = aggressiv)
+
+    Algorithmus:
+      1. Rauschspektrum als Median über mehrere Noise-Frames schätzen
+         (Median ist robuster als Mittelwert gegen Spitzen-Ereignisse).
+      2. Overlap-Add: Signal in überlappende Frames mit Hanning-Fenster zerlegen.
+      3. Spektrale Subtraktion mit Mindestpegel (verhindert "musikalisches Rauschen").
+      4. Overlap-Add-Rekonstruktion und Amplitudenclipping.
+    Gibt ein int16 1D-Array zurück.
+    """
+    N   = 1024           # FFT-Fenstergröße
+    hop = N // 2         # 50 % Overlap
+    win = np.hanning(N)
+
+    # ── Rauschspektrum schätzen (Median über max. 16 Frames) ─────────────────
+    noise_f = noise_1d.astype(np.float64)
+    n_noise_frames = max(1, min(16, len(noise_f) // hop))
+    noise_mags = []
+    for i in range(n_noise_frames):
+        start = i * hop
+        nf = noise_f[start:start + N]
+        if len(nf) < N:
+            nf = np.pad(nf, (0, N - len(nf)))
+        noise_mags.append(np.abs(np.fft.rfft(nf * win, N)))
+    noise_spectrum = np.median(noise_mags, axis=0)   # robust gegen Impulse
+
+    # ── Overlap-Add Verarbeitung ──────────────────────────────────────────────
+    sig     = samples_1d.astype(np.float64)
+    out_len = len(sig) + N
+    out     = np.zeros(out_len, dtype=np.float64)
+    norm    = np.zeros(out_len, dtype=np.float64)
+
+    for start in range(0, len(sig), hop):
+        frame = sig[start:start + N]
+        if len(frame) < N:
+            frame = np.pad(frame, (0, N - len(frame)))
+
+        windowed = frame * win
+        spec     = np.fft.rfft(windowed, N)
+        mag      = np.abs(spec)
+        phase    = np.angle(spec)
+
+        # Spektrale Subtraktion — Mindestpegel 5 % verhindert musikalisches Rauschen
+        clean_mag = np.maximum(
+            mag - strength * noise_spectrum,
+            0.05 * mag,
+        )
+
+        clean_frame = np.fft.irfft(clean_mag * np.exp(1j * phase), N) * win
+
+        end = min(start + N, out_len)
+        out[start:end]  += clean_frame[:end - start]
+        norm[start:end] += (win ** 2)[:end - start]
+
+    # ── Normalisierung und Clipping ───────────────────────────────────────────
+    valid = norm > 1e-8
+    out[valid] /= norm[valid]
+    return np.clip(out[:len(sig)], -32767, 32767).astype(np.int16)
+
+
 class SpeechRecognizer:
     def __init__(self, language: str = "de-DE", api_key: str = "", api_base: str = "", device: int = -1):
         self.language    = language
@@ -38,6 +108,8 @@ class SpeechRecognizer:
         self._last_audio: Optional[bytes] = None   # Letztes aufgenommenes Audio (für Emotion-Analyse)
         self.smart_pause: bool = False              # Adaptiver Pausen-Modus
         self._was_whisper: bool = False             # True wenn letzte Aufnahme Flüstersprache war
+        self.noise_filter: bool = False             # Spektrale Rauschunterdrückung aktiv
+        self._noise_samples: Optional[np.ndarray] = None  # Kalibriertes Umgebungsrauschen (1D int16)
 
         if api_key and api_base:
             try:
@@ -73,6 +145,9 @@ class SpeechRecognizer:
                 )
                 sd.wait()
                 ambient = _rms_db(samples)
+
+                # Rauschprofil für Geräuschfilter speichern (1D int16)
+                self._noise_samples = samples.reshape(-1).copy()
 
                 # Adaptive Marge: je lauter die Umgebung, desto kleiner die Marge
                 # So bleibt die Schwelle immer erreichbar für eine normale Stimme
@@ -307,6 +382,15 @@ class SpeechRecognizer:
             self._was_whisper = False
 
         all_samples = np.concatenate(frames)
+
+        # Geräuschfilter: spektrale Subtraktion mit dem Umgebungsrausch-Profil
+        if self.noise_filter and self._noise_samples is not None:
+            try:
+                flat     = all_samples.reshape(-1)            # 2D → 1D
+                denoised = _denoise_spectral(flat, self._noise_samples)
+                all_samples = denoised.reshape(all_samples.shape)
+            except Exception as _denoise_err:
+                logger.debug(f"Geräuschfilter übersprungen: {_denoise_err}")
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(_CHANNELS)
