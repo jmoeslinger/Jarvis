@@ -1,8 +1,12 @@
 import json
+import logging
 import os
+import threading
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List
+
+_logger = logging.getLogger("jarvis.settings")
 
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "Jarvis"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -86,6 +90,9 @@ class Settings:
     def __post_init__(self):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+        # BUG-070: Lock als normales Attribut (kein Dataclass-Feld) — wird nicht in
+        # asdict() aufgenommen. object.__setattr__ umgeht den Dataclass-Mechanismus.
+        object.__setattr__(self, '_save_lock', threading.Lock())
         self._load()
 
     def _load(self):
@@ -129,8 +136,25 @@ class Settings:
                 pass
 
     def save(self):
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(asdict(self), f, indent=2, ensure_ascii=False)
+        """Atomisches, thread-sicheres Speichern der Settings.
+        BUG-070: Snapshot unter Lock, dann Temp-Datei + replace() ausserhalb —
+        verhindert Datei-Korruption bei Absturz und gleichzeitige Schreibzugriffe.
+        """
+        with self._save_lock:
+            data = asdict(self)
+        tmp = CONFIG_FILE.with_suffix(".tmp")
+        try:
+            tmp.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            tmp.replace(CONFIG_FILE)
+        except Exception as exc:
+            _logger.warning(f"Settings speichern fehlgeschlagen: {exc}")
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     def reload(self):
         self._load()

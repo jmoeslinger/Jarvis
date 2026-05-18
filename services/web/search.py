@@ -33,18 +33,26 @@ class WebSearchService:
             return f"Suche fehlgeschlagen: {e}"
 
     def _ddg_search(self, query: str, max_results: int) -> List[Dict]:
-        """Sucht via DuckDuckGo. Timeout nach 10 Sekunden um Haenger zu vermeiden."""
+        """Sucht via DuckDuckGo. Timeout nach 10 Sekunden um Haenger zu vermeiden.
+        BUG-071: ThreadPoolExecutor NICHT als Context-Manager verwenden — dessen
+        __exit__ ruft shutdown(wait=True) auf und blockiert dann unendlich wenn der
+        DDG-Thread nach Timeout noch laeuft. Stattdessen shutdown(wait=False).
+        """
         def _run():
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=max_results, region="de-de"))
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=10)
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"Suche Timeout (10s): '{query}'")
-                return []
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(_run)
+        try:
+            return future.result(timeout=10)
+        except concurrent.futures.TimeoutError:
+            logger.warning(f"Suche Timeout (10s): '{query}'")
+            return []
+        finally:
+            # wait=False: blockiert nicht auf laufende Threads; der Daemon-Thread
+            # laeuft im Hintergrund weiter bis er fertig ist oder der Prozess endet
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def _format_results(self, query: str, results: List[Dict]) -> str:
         lines = [f"Suchergebnisse fuer '{query}':\n"]

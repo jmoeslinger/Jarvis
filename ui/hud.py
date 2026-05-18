@@ -57,6 +57,9 @@ class HUD:
         self._drag_y = 0
         self._last_clear_ts = 0.0   # Debounce für "Verlauf löschen"
         self._open_panel_cb = None
+        # BUG-072: Stop-Event fuer _connectivity_loop — ersetzt winfo_exists()-
+        # Aufruf aus Hintergrund-Thread (tkinter ist nicht thread-sicher)
+        self._net_stop = threading.Event()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -76,6 +79,8 @@ class HUD:
         self._register_callbacks()
         self._root.after(60, self._tick)
         self._root.mainloop()
+        # Mainloop beendet → Hintergrund-Thread sauber stoppen (BUG-072)
+        self._net_stop.set()
 
     def update_hotkey_hint(self):
         """Aktualisiert den Hinweistext wenn der Hotkey in den Einstellungen geändert wurde."""
@@ -345,14 +350,17 @@ class HUD:
             return False
 
     def _connectivity_loop(self):
-        while self.is_alive():
+        # BUG-072: _net_stop.wait() statt is_alive() — kein winfo_exists()-
+        # Aufruf aus Hintergrund-Thread (tkinter ist nicht thread-sicher).
+        # wait(timeout=10) blockiert 10s ODER kehrt sofort zurück wenn das
+        # Event gesetzt wird (mainloop beendet) → sauberer Thread-Exit.
+        while not self._net_stop.wait(timeout=10):
             online = self._check_connectivity()
             if online != self._online:
                 self._online = online
                 color = "#22AA55" if online else "#CC2233"
                 if self._root and self._net_dot:
                     self._root.after(0, lambda c=color: self._net_dot.configure(text_color=c))
-            time.sleep(10)
 
     # ------------------------------------------------------------------
     # Callbacks
