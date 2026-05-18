@@ -83,6 +83,9 @@ class ControlPanel:
         self._personality_btns: dict = {}
         self._vision_btns: dict = {}
 
+        # Kamera-Fenster
+        self._camera_window = None
+
         self._jarvis.on_state_change(self._on_state)
         self._jarvis.on_message(self._on_message)
         self._jarvis.on_task_update(self._on_task_update)
@@ -489,8 +492,18 @@ class ControlPanel:
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._personality_btns[val] = btn
 
+        # ── Kamera-Fenster Button (hervorgehoben) ────────────────────────────────
+        ctk.CTkButton(
+            body, text="🎥   Kamera-Fenster öffnen",
+            fg_color="#0e4f72", hover_color="#0369a1",
+            text_color="#7dd3fc",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            height=44, corner_radius=8, anchor="w",
+            command=self._act_open_camera,
+        ).pack(fill="x", pady=(0, 4))
+
         _VISION_MODES = [
-            ("📷   Vision / Kamera",         "vision_enabled"),
+            ("📷   Vision aktivieren",        "vision_enabled"),
             ("💡   Proaktive Vorschlaege",    "proactive_suggestions"),
             ("📋   Tagesplanung",             "day_planning"),
             ("😊   Mood-Antworten",           "mood_based_responses"),
@@ -775,6 +788,16 @@ class ControlPanel:
             logger.error(f"Einstellungen: {e}")
         finally:
             self._settings_open = False
+
+    def _act_open_camera(self):
+        """Oeffnet das dedizierte Kamera-Fenster mit Live-Vorschau."""
+        try:
+            from ui.camera_window import CameraWindow
+            if self._camera_window is None:
+                self._camera_window = CameraWindow(self._jarvis)
+            self._camera_window.show(hud_root=self._hud_root)
+        except Exception as e:
+            logger.error(f"Kamera-Fenster: {e}")
 
     def _act_quit(self):
         self._jarvis.stop()
