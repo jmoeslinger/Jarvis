@@ -1,7 +1,7 @@
 """
 Tagesplanung — einfacher persistenter Aufgabenplaner.
 
-Speichert Tages-Aufgaben in %APPDATA%\Jarvis\day_plan.json.
+Speichert Tages-Aufgaben in %APPDATA%\\Jarvis\\day_plan.json.
 Wird automatisch beim Tageswechsel zurueckgesetzt.
 """
 import json
