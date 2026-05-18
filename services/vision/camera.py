@@ -18,12 +18,17 @@ class CameraService:
     # ── Oeffentliche API ──────────────────────────────────────────────────────
 
     def is_available(self) -> bool:
-        """Prueft ob mindestens eine Kamera verfuegbar ist."""
+        """Prueft ob mindestens eine Kamera verfuegbar ist.
+        BUG-041: Lock verwenden damit kein gleichzeitiger Zugriff mit capture_base64() entsteht.
+        """
         try:
             import cv2
-            cap = cv2.VideoCapture(self._camera_index, cv2.CAP_DSHOW)
-            ok = cap.isOpened()
-            cap.release()
+            with self._lock:
+                cap = cv2.VideoCapture(self._camera_index, cv2.CAP_DSHOW)
+                try:
+                    ok = cap.isOpened()
+                finally:
+                    cap.release()
             return ok
         except Exception:
             return False
@@ -33,8 +38,13 @@ class CameraService:
         Nimmt ein Foto auf und gibt es als Base64-JPEG-String zurueck.
         Gibt None zurueck wenn die Kamera nicht erreichbar ist.
         Versucht zuerst die konfigurierte Kamera, dann Index 0.
+        BUG-053: Reihenfolge explizit erzwingen statt set{} zu verwenden.
         """
-        indices = list({self._camera_index, 0})
+        # BUG-053: set{} verliert Reihenfolge — konfigurierte Kamera immer zuerst
+        if self._camera_index == 0:
+            indices = [0]
+        else:
+            indices = [self._camera_index, 0]
         for idx in indices:
             b64 = self._capture_from(idx, quality)
             if b64:
@@ -43,14 +53,18 @@ class CameraService:
         return None
 
     def list_cameras(self) -> List[int]:
-        """Gibt Liste verfuegbarer Kamera-Indizes (0-4) zurueck."""
+        """Gibt Liste verfuegbarer Kamera-Indizes (0-4) zurueck.
+        BUG-057: cap.release() in try/finally sicherstellen.
+        """
         available = []
         try:
             import cv2
             for i in range(5):
                 cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-                if cap.isOpened():
-                    available.append(i)
+                try:
+                    if cap.isOpened():
+                        available.append(i)
+                finally:
                     cap.release()
         except Exception:
             pass
@@ -65,18 +79,21 @@ class CameraService:
         try:
             import cv2
 
+            # BUG-042: cap.release() in try/finally — kein Leak bei Exception
             with self._lock:
                 cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-                if not cap.isOpened():
-                    return None
+                try:
+                    if not cap.isOpened():
+                        return None
 
-                # Mehrere Frames lesen damit der Auto-Fokus / Weissabgleich stabil ist
-                frame = None
-                for _ in range(8):
-                    ret, f = cap.read()
-                    if ret:
-                        frame = f
-                cap.release()
+                    # Mehrere Frames lesen damit der Auto-Fokus / Weissabgleich stabil ist
+                    frame = None
+                    for _ in range(8):
+                        ret, f = cap.read()
+                        if ret:
+                            frame = f
+                finally:
+                    cap.release()
 
             if frame is None:
                 return None

@@ -50,13 +50,20 @@ class DayPlanner:
         self._next_id = 0
 
     def _save(self):
+        """Schreibt den Tagesplan auf Disk.
+        BUG-061: Nicht unter self._lock aufrufen — Disk-I/O blockiert den Lock.
+        Snapshot unter Lock erstellen, dann ausserhalb schreiben.
+        """
+        with self._lock:
+            snapshot = {
+                "date":    self._today,
+                "tasks":   list(self._tasks),
+                "next_id": self._next_id,
+            }
         try:
             tmp = _PLAN_FILE.with_suffix(".tmp")
             tmp.write_text(
-                json.dumps(
-                    {"date": self._today, "tasks": self._tasks, "next_id": self._next_id},
-                    ensure_ascii=False, indent=2,
-                ),
+                json.dumps(snapshot, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
             tmp.replace(_PLAN_FILE)
@@ -64,14 +71,19 @@ class DayPlanner:
             logger.warning(f"Tagesplan-Speichern: {e}")
 
     def _check_day_reset(self):
-        """Setzt den Plan beim Tageswechsel automatisch zurueck."""
+        """Setzt den Plan beim Tageswechsel automatisch zurueck.
+        Muss unter self._lock aufgerufen werden.
+        BUG-061: _save() wird vom Aufrufer nach Freigabe des Locks aufgerufen.
+        Gibt True zurueck wenn ein Reset stattfand.
+        """
         today = str(date.today())
         if today != self._today:
             self._today = today
             self._tasks = []
             self._next_id = 0  # BUG-017: Counter bei Tageswechsel zuruecksetzen
-            self._save()
             logger.info("Tageswechsel — Tagesplan zurueckgesetzt.")
+            return True
+        return False
 
     # ── Oeffentliche API ──────────────────────────────────────────────────────
 
@@ -92,14 +104,16 @@ class DayPlanner:
             }
             self._next_id += 1   # BUG-017: nach Eintrag erhoehen
             self._tasks.append(entry)
-            self._save()
             icons = {"high": "Hoch", "normal": "Normal", "low": "Niedrig"}
             icon = icons.get(priority, "Normal")
             time_str = f" um {time_hint}" if time_hint else ""
-            return f"Aufgabe hinzugefuegt [{icon}]: '{task}'{time_str}."
+        # BUG-061: _save() ausserhalb des Locks aufrufen
+        self._save()
+        return f"Aufgabe hinzugefuegt [{icon}]: '{task}'{time_str}."
 
     def complete_task(self, task_id_or_name: str) -> str:
         """Markiert eine Aufgabe als erledigt (per ID oder Namens-Substring)."""
+        result_msg = None
         with self._lock:
             self._check_day_reset()
             # Erst per ID versuchen
@@ -108,24 +122,32 @@ class DayPlanner:
                 for t in self._tasks:
                     if t["id"] == tid and not t["done"]:
                         t["done"] = True
-                        self._save()
-                        return f"Aufgabe #{tid} '{t['task']}' erledigt."
+                        result_msg = f"Aufgabe #{tid} '{t['task']}' erledigt."
+                        break
             except ValueError:
                 pass
             # Dann per Substring
-            query = task_id_or_name.lower()
-            for t in self._tasks:
-                if query in t["task"].lower() and not t["done"]:
-                    t["done"] = True
-                    self._save()
-                    return f"Aufgabe '{t['task']}' als erledigt markiert."
-            return f"Keine offene Aufgabe '{task_id_or_name}' gefunden."
+            if result_msg is None:
+                query = task_id_or_name.lower()
+                for t in self._tasks:
+                    if query in t["task"].lower() and not t["done"]:
+                        t["done"] = True
+                        result_msg = f"Aufgabe '{t['task']}' als erledigt markiert."
+                        break
+        # BUG-061: _save() ausserhalb des Locks aufrufen
+        if result_msg is not None:
+            self._save()
+            return result_msg
+        return f"Keine offene Aufgabe '{task_id_or_name}' gefunden."
 
     def get_plan(self, filter_done: bool = False) -> str:
         """Gibt den aktuellen Tagesplan als lesbaren String zurueck."""
         with self._lock:
-            self._check_day_reset()
+            did_reset = self._check_day_reset()
             tasks = [t for t in self._tasks if not t["done"]] if filter_done else self._tasks
+        # BUG-061: Nach Tageswechsel-Reset ausserhalb des Locks speichern
+        if did_reset:
+            self._save()
 
         if not tasks:
             return "Dein Tagesplan ist leer. Du kannst Aufgaben hinzufuegen."
@@ -145,7 +167,8 @@ class DayPlanner:
             before = len(self._tasks)
             self._tasks = [t for t in self._tasks if not t["done"]]
             removed = before - len(self._tasks)
-            self._save()
+        # BUG-061: _save() ausserhalb des Locks aufrufen
+        self._save()
         return f"{removed} erledigte Aufgaben entfernt."
 
     def get_open_count(self) -> int:

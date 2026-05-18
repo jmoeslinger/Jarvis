@@ -55,18 +55,21 @@ class ConversationLog:
             return []
 
     def _save(self):
-        """Speichert alle Sessions inkl. der aktuellen atomar auf Disk."""
-        try:
+        """Speichert alle Sessions inkl. der aktuellen atomar auf Disk.
+        BUG-059: Darf nicht unter self._lock aufgerufen werden — Disk-I/O blockiert den Lock.
+        Snapshot der aktuellen Daten unter Lock erstellen, dann ausserhalb schreiben.
+        """
+        with self._lock:
             all_sessions = list(self._sessions)
             if self._current_turns:
                 all_sessions.append({
                     "session_start": self._session_start,
                     "turns":         list(self._current_turns),
                 })
-            # Auf Maximum begrenzen — älteste entfernen
-            if len(all_sessions) > _MAX_SESSIONS:
-                all_sessions = all_sessions[-_MAX_SESSIONS:]
-
+        # Auf Maximum begrenzen — älteste entfernen
+        if len(all_sessions) > _MAX_SESSIONS:
+            all_sessions = all_sessions[-_MAX_SESSIONS:]
+        try:
             tmp = self._file.with_suffix(".tmp")
             tmp.write_text(
                 json.dumps(all_sessions, ensure_ascii=False, indent=2),
@@ -105,9 +108,11 @@ class ConversationLog:
             # Session auf Maximum begrenzen
             if len(self._current_turns) > _MAX_TURNS_SESSION:
                 self._current_turns = self._current_turns[-_MAX_TURNS_SESSION:]
-            # Alle 4 Turns periodisch auf Disk schreiben
-            if len(self._current_turns) % 4 == 0:
-                self._save()
+            # Alle 4 Turns periodisch auf Disk schreiben — Flag setzen, ausserhalb speichern
+            should_save = len(self._current_turns) % 4 == 0
+        # BUG-059: _save() ausserhalb des Locks aufrufen (holt intern Lock fuer Snapshot)
+        if should_save:
+            self._save()
 
     def flush(self):
         """
@@ -115,11 +120,12 @@ class ConversationLog:
         Sollte beim Beenden von Jarvis aufgerufen werden.
         """
         with self._lock:
-            if self._current_turns:
-                self._save()
-                logger.info(
-                    f"ConversationLog gespeichert: {len(self._current_turns)} Turns"
-                )
+            should_save = bool(self._current_turns)
+            turn_count  = len(self._current_turns)
+        # BUG-059: _save() ausserhalb des Locks aufrufen
+        if should_save:
+            self._save()
+            logger.info(f"ConversationLog gespeichert: {turn_count} Turns")
 
     def get_last_session_history(self, max_turns: int = _RESUME_TURNS) -> List[Dict]:
         """

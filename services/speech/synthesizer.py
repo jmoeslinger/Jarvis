@@ -183,15 +183,18 @@ class SpeechSynthesizer:
     # ------------------------------------------------------------------
 
     def prepare(self, text: str):
-        """Synthetisiert Audio und gibt (data, samplerate) zurück — noch kein Ton."""
+        """Synthetisiert Audio und gibt (data, samplerate) zurück — noch kein Ton.
+        BUG-060: Netzwerk-IO nicht unter Lock ausfuehren — stop() kann sonst bis zu 30s blockieren.
+        """
         with self._lock:
             self._speaking = True
             self._stopped  = False
-            try:
-                return self._prepare_edge_tts(text)
-            except Exception as e:
-                logger.warning(f"edge-tts Fehler beim Vorbereiten: {e}")
-                return None  # Fallback wird in play() behandelt
+        # Netzwerk-I/O ausserhalb des Locks — stop() bleibt immer reaktionsfaehig
+        try:
+            return self._prepare_edge_tts(text)
+        except Exception as e:
+            logger.warning(f"edge-tts Fehler beim Vorbereiten: {e}")
+            return None  # Fallback wird in play() behandelt
 
     def play(self, audio, text: str = ""):
         """Spielt vorbereitetes Audio sofort ab. Falls None → SAPI-Fallback."""

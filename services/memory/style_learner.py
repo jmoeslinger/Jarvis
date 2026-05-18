@@ -96,10 +96,16 @@ class StyleLearner:
         return _default_profile()
 
     def _save(self):
+        """Schreibt das Profil auf Disk.
+        BUG-058: Nicht unter self._lock aufrufen — Disk-I/O blockiert den Lock.
+        Snapshot ausserhalb des Locks serialisieren.
+        """
+        with self._lock:
+            snapshot = dict(self._profile)
         try:
             tmp = _STYLE_FILE.with_suffix(".tmp")
             tmp.write_text(
-                json.dumps(self._profile, ensure_ascii=False, indent=2),
+                json.dumps(snapshot, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
             tmp.replace(_STYLE_FILE)
@@ -169,9 +175,12 @@ class StyleLearner:
             if n + 1 >= _MIN_SAMPLES:
                 self._derive_preferences()
 
-            # Alle 5 Commands auf Disk
-            if (n + 1) % 5 == 0:
-                self._save()
+            # Alle 5 Commands auf Disk — Flag setzen, ausserhalb des Locks speichern
+            should_save = (n + 1) % 5 == 0
+
+        # BUG-058: _save() ausserhalb des Locks aufrufen (holt intern Lock fuer Snapshot)
+        if should_save:
+            self._save()
 
     def record_interrupt(self):
         """
@@ -182,10 +191,10 @@ class StyleLearner:
             self._profile["interrupt_count"] += 1
             if self._profile["total_commands"] >= _MIN_SAMPLES:
                 self._derive_preferences()
-            self._save()
-        logger.debug(
-            f"TTS-Interrupt notiert (gesamt: {self._profile['interrupt_count']})"
-        )
+            _count = self._profile["interrupt_count"]
+        # BUG-058: _save() ausserhalb des Locks aufrufen
+        self._save()
+        logger.debug(f"TTS-Interrupt notiert (gesamt: {_count})")
 
     def _derive_preferences(self):
         """
@@ -242,5 +251,6 @@ class StyleLearner:
         """Setzt das gesamte Lernprofil zurück und löscht die Disk-Datei."""
         with self._lock:
             self._profile = _default_profile()
-            self._save()
+        # BUG-058: _save() ausserhalb des Locks aufrufen
+        self._save()
         logger.info("Style-Profil zurückgesetzt.")

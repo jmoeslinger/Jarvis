@@ -102,6 +102,7 @@ class JarvisCore:
         self._last_command: Optional[str] = None
         self._cmd_stop_event = threading.Event()
         self._active_timers: List[threading.Timer] = []
+        self._timers_lock = threading.Lock()   # BUG-043: _active_timers thread-sicher
 
         # ── Hörmodus ──────────────────────────────────────────────────────────
         self._local_ww_detector = None          # LocalWakeWordDetector (lazy init)
@@ -296,12 +297,14 @@ class JarvisCore:
         except Exception:
             pass
         # Alle ausstehenden Timer abbrechen damit sie nach dem Stop nicht noch feuern
-        for t in self._active_timers:
-            try:
-                t.cancel()
-            except Exception:
-                pass
-        self._active_timers.clear()
+        # BUG-043: _timers_lock für thread-sicheren Zugriff auf _active_timers
+        with self._timers_lock:
+            for t in self._active_timers:
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+            self._active_timers.clear()
         self.synthesizer.stop()
         self.hotkey.stop()
         self._set_state(State.IDLE)
@@ -818,7 +821,7 @@ class JarvisCore:
         Normal  → mittlere Komplexität
         Complex → Erklärungen, technische Fragen, mehrstufige Aufgaben
         """
-        import re as _re
+        # BUG-055: `import re as _re` war toter Import — re ist bereits auf Modulebene vorhanden
         text = command.lower().strip()
         # System-Hints herausfiltern
         if text.startswith("["):
@@ -1620,12 +1623,16 @@ class JarvisCore:
                 logger.error(f"Timer-Ring TTS-Fehler: {e}")
 
         # Alte abgeschlossene Timer aufräumen
-        self._active_timers = [t for t in self._active_timers if t.is_alive()]
+        # BUG-043: _active_timers unter Lock bereinigen und erweitern
+        with self._timers_lock:
+            self._active_timers = [t for t in self._active_timers if t.is_alive()]
 
         t = threading.Timer(float(seconds), _ring)
         t.daemon = True
         t.start()
-        self._active_timers.append(t)
+
+        with self._timers_lock:
+            self._active_timers.append(t)
         logger.info(f"Timer gestartet: '{label}' in {seconds}s")
 
         mins = seconds // 60
