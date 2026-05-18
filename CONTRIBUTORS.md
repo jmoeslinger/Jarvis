@@ -1,49 +1,49 @@
 # Contributors — Jarvis
 
-Danke an alle, die Jarvis möglich gemacht haben.
+Thanks to everyone who helped make Jarvis possible.
 
 ---
 
-## 👨‍💻 Hauptentwickler
+## 👨‍💻 Lead Developer
 
-| Name | GitHub | Rolle |
-|------|--------|-------|
-| Jakub Möslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator, Entwickler, Projektleiter |
-
----
-
-## 🤖 KI-Unterstützung
-
-| Name | Zeitraum | Rolle |
-|------|----------|-------|
-| Claude (Anthropic) | v0.1.10 – v0.3.0 | Autonomes Debugging, Bug-Fixes & Feature-Entwicklung |
-
-### Was Claude beigetragen hat
-
-**Autonomes Debugging (v0.1.10 – v0.2.8)**
-> Claude hat in mehreren autonomen Debug-Sessions alle Python-Dateien des Projekts systematisch analysiert, Bugs aufgespürt und behoben — ohne dass Jakub jeden Fix einzeln beschreiben musste.
-> Kumulativ wurden über 72 Bugs gefunden und gefixt (BUG-001 bis BUG-072), darunter:
-> - Thread-Safety-Probleme (tkinter, Locks, Events)
-> - Atomisches Speichern von Konfigurationsdateien
-> - Hänger durch falsche Executor-Nutzung
-> - Race Conditions in Hintergrund-Threads
-> - Memory-Leaks und fehlende `release()`-Aufrufe
-
-**Feature-Entwicklung (v0.3.0)**
-> Claude hat auf Basis von Jakubs Ideen zwei vollständige neue Features entworfen und implementiert:
-> - **Video-Analyse**: Aufnahme mehrerer Frames → Grid-Kollage → Vision-KI-Analyse
-> - **Gestensteuerung**: MediaPipe-basierte Echtzeit-Handerkennung mit Hold-to-Trigger,
->   konfigurierbare Geste→Befehl-Mappings, Live-Overlay im Kamera-Fenster
+| Name | GitHub | Role |
+|------|--------|------|
+| Jakub Möslinger | [@jmoeslinger](https://github.com/jmoeslinger) | Creator, Developer, Project Lead |
 
 ---
 
-## 🙌 Wie kann ich beitragen?
+## 🤖 AI Assistance
 
-Pull Requests sind herzlich willkommen! Bitte:
+| Name | Period | Role |
+|------|--------|------|
+| Claude (Anthropic) | v0.1.10 – v0.3.0 | Autonomous debugging, bug fixes & feature development |
 
-1. Fork das Repository
-2. Erstelle einen Feature-Branch (`git checkout -b feature/mein-feature`)
-3. Committe deine Änderungen (`v0.x.x: kurze Beschreibung`)
-4. Öffne einen Pull Request
+### What Claude contributed
 
-Für Bugs oder Ideen: einfach ein [Issue aufmachen](https://github.com/jmoeslinger/Jarvis/issues).
+**Autonomous Debugging (v0.1.10 – v0.2.8)**
+> Claude systematically reviewed all Python files across multiple autonomous debug sessions, identified bugs and implemented fixes — without Jakub having to describe each fix individually.
+> Over 72 bugs were found and resolved (BUG-001 through BUG-072), including:
+> - Thread-safety issues (tkinter, locks, events)
+> - Atomic config file writes (crash-safe persistence)
+> - Hangs caused by incorrect executor usage
+> - Race conditions in background threads
+> - Memory leaks and missing `release()` calls
+
+**Feature Development (v0.3.0)**
+> Based on Jakub's ideas, Claude designed and implemented two complete new features:
+> - **Video analysis**: capture multiple frames → stitch into grid collage → Vision AI analysis
+> - **Gesture control**: real-time hand detection via MediaPipe with hold-to-trigger,
+>   configurable gesture→command mappings, live overlay in the camera window
+
+---
+
+## 🙌 How to contribute
+
+Pull requests are very welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`v0.x.x: short description`)
+4. Open a pull request
+
+For bugs or ideas: just [open an issue](https://github.com/jmoeslinger/Jarvis/issues).

@@ -1,36 +1,36 @@
-# ── Kern-KI ───────────────────────────────────────────────────────────────────
+# ── Core AI ───────────────────────────────────────────────────────────────────
 openai>=1.0.0
 
-# ── Spracherkennung ───────────────────────────────────────────────────────────
+# ── Speech recognition ────────────────────────────────────────────────────────
 SpeechRecognition>=3.10.0
 sounddevice>=0.4.6
 soundfile>=0.12.0
 numpy>=1.24.0
 
-# ── Sprachausgabe ─────────────────────────────────────────────────────────────
+# ── Text-to-speech ────────────────────────────────────────────────────────────
 edge-tts>=6.1.0
 pyttsx3>=2.90
 
-# ── Internet-Suche ────────────────────────────────────────────────────────────
+# ── Web search ────────────────────────────────────────────────────────────────
 ddgs>=0.1.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 
-# ── Prozessverwaltung ─────────────────────────────────────────────────────────
+# ── Process management ────────────────────────────────────────────────────────
 psutil>=5.9.0
 
-# ── Globale Tastenkürzel ──────────────────────────────────────────────────────
+# ── Global hotkeys ────────────────────────────────────────────────────────────
 keyboard>=0.13.5
 
-# ── Benutzeroberfläche ────────────────────────────────────────────────────────
+# ── User interface ────────────────────────────────────────────────────────────
 pystray>=0.19.5
 Pillow>=10.0.0
 customtkinter>=5.2.2
 
-# ── Kamera & Vision (optional — ohne diese Pakete laeuft Jarvis normal weiter) ─
-# pip install opencv-python          # Kamera-Vorschau, Foto- und Video-Aufnahme
-# pip install mediapipe              # Gestensteuerung (v0.3.0+)
+# ── Camera & Vision (optional — Jarvis runs fine without these) ───────────────
+# pip install opencv-python          # Camera preview, photo and video capture
+# pip install mediapipe              # Gesture control (v0.3.0+)
 
-# ── Erweiterte optionale Features ────────────────────────────────────────────
-# pip install openwakeword onnxruntime   # Lokales Wake-Word (offline, kein API-Key)
-# pip install resemblyzer               # Sprechererkennung (nur auf eigene Stimme reagieren)
+# ── Further optional features ─────────────────────────────────────────────────
+# pip install openwakeword onnxruntime   # Local wake word (fully offline, no API key)
+# pip install resemblyzer               # Speaker recognition (react only to your voice)
