@@ -32,9 +32,22 @@ _SAFE_ROOTS  = [_HOME]
 
 # Gesperrte Terminal-Befehle (destruktiv / gefährlich)
 _BLOCKED_CMDS = [
+    # Dateisystem — destruktiv
     "rm -rf", "rmdir /s /q", "format ", "mkfs",
-    "del /f /s", "rd /s", "shutdown", ":(){:|:&};:",
-    "dd if=", "> /dev/", "reg delete",
+    "del /f /s", "rd /s",
+    # System / Netzwerk
+    "shutdown", "restart-computer", "stop-computer",
+    ":(){:|:&};:", "dd if=", "> /dev/",
+    # Registry — BUG-030: add/import fehlte
+    "reg delete", "reg add", "reg import", "regedit",
+    # Persistenz / Autorun
+    "schtasks /create", "schtasks /change",
+    # Benutzerverwaltung
+    "net user", "net localgroup", "net group",
+    # PowerShell Execution-Policy-Umgehung
+    "set-executionpolicy",
+    # Passwort-Dumps
+    "mimikatz", "procdump", "lsass",
 ]
 
 _MAX_FILE_BYTES = 512 * 1024   # 512 KB — mehr würde den AI-Context sprengen

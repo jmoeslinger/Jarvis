@@ -817,6 +817,7 @@ class GrokClient:
 
             # Ergebnisse sammeln — parallel oder sequenziell
             stream_results: Dict[str, str] = {}
+            _stream_results_lock = threading.Lock()  # BUG-008: dict vor Race schuetzen
 
             if self._parallel_tasks and len(tool_calls_list) > 1:
                 threads = []
@@ -831,10 +832,12 @@ class GrokClient:
 
                     def _run(tc_id=tc["id"], n=name, a=args):
                         try:
-                            stream_results[tc_id] = str(self._tools[n](**a)) \
-                                if n in self._tools else f"Unbekanntes Tool: '{n}'"
+                            res = str(self._tools[n](**a)) if n in self._tools \
+                                else f"Unbekanntes Tool: '{n}'"
                         except Exception as e:
-                            stream_results[tc_id] = f"Tool-Fehler: {e}"
+                            res = f"Tool-Fehler: {e}"
+                        with _stream_results_lock:
+                            stream_results[tc_id] = res
 
                     t = threading.Thread(target=_run, daemon=True)
                     threads.append(t)
@@ -1027,6 +1030,7 @@ class GrokClient:
 
         # Tool-Calls ausführen — bei parallel_tasks gleichzeitig
         tool_results: Dict[str, str] = {}
+        _tool_results_lock = threading.Lock()  # BUG-008: dict vor Race schuetzen
 
         if self._parallel_tasks and len(msg.tool_calls) > 1:
             # Parallele Ausführung aller Tools
@@ -1042,10 +1046,12 @@ class GrokClient:
 
                 def _run(tc_id=tc.id, n=name, a=args):
                     try:
-                        tool_results[tc_id] = str(self._tools[n](**a)) if n in self._tools \
+                        res = str(self._tools[n](**a)) if n in self._tools \
                             else f"Unbekanntes Tool: '{n}'"
                     except Exception as e:
-                        tool_results[tc_id] = f"Tool-Fehler: {e}"
+                        res = f"Tool-Fehler: {e}"
+                    with _tool_results_lock:
+                        tool_results[tc_id] = res
 
                 t = threading.Thread(target=_run, daemon=True)
                 threads.append(t)

@@ -384,13 +384,15 @@ class TaskManager:
                     self._recurring[rid]["next_run"] = time.monotonic() + e["interval"]
             self._schedule_recurring(rid)
 
-        timer = threading.Timer(entry["interval"], _fire)
-        timer.daemon = True
-        timer.start()
-
+        # BUG-010: Timer unter Lock anlegen und speichern, DANN starten —
+        # so kann remove_recurring() ihn immer sicher canceln.
         with self._recurring_lock:
-            if rid in self._recurring:
-                self._recurring[rid]["timer"] = timer
+            if rid not in self._recurring:
+                return
+            timer = threading.Timer(entry["interval"], _fire)
+            timer.daemon = True
+            self._recurring[rid]["timer"] = timer
+        timer.start()
 
     # ── Notify ───────────────────────────────────────────────────────────────
 

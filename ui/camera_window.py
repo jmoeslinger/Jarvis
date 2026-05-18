@@ -97,10 +97,11 @@ def _list_cameras() -> List[Tuple[int, str]]:
                 cap.release()
                 cap = cv2.VideoCapture(i)
             if cap.isOpened():
-                # Kurz einen Frame lesen damit wir wissen ob es echtes Video gibt
+                # BUG-035: ok-Ergebnis pruefen — nur aufnehmen wenn Frame lesbar
                 ok, frame = cap.read()
-                label = f"Kamera {i}"
-                result.append((i, label))
+                if ok and frame is not None:
+                    label = f"Kamera {i}"
+                    result.append((i, label))
         except Exception:
             pass
         finally:
@@ -149,6 +150,7 @@ class CameraWindow:
         self._preview_label = None           # Alias auf _preview_canvas
         self._canvas_image_id: Optional[int] = None
         self._canvas_tk_img = None
+        self._pending_frame = None           # BUG-027: letztes PIL-Frame fuer Deduplikation
         self._status_lbl:    Optional[ctk.CTkLabel] = None
         self._running = False
         self._cap = None
@@ -472,8 +474,10 @@ class CameraWindow:
                 # Kein Windows-Name: OpenCV hat direkten Zugriff → wahrscheinlich virtuelle Cam
                 label = f"Kamera {idx}"
                 # Versuche OBS Virtual Camera per typischen Merkmalen zu erkennen
+                # BUG-005: try/finally stellt sicher dass cap immer released wird
+                cap = None
                 try:
-                    import cv2, numpy as np
+                    import cv2
                     cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
                     if cap.isOpened():
                         for _ in range(3): cap.read()
@@ -482,9 +486,12 @@ class CameraWindow:
                             h, w = frame.shape[:2]
                             if w == 1920 and h == 1080:  # Typisch fuer OBS Virtual Camera
                                 label = f"Kamera {idx} (OBS/Virtuell)"
-                        cap.release()
                 except Exception:
                     pass
+                finally:
+                    if cap is not None:
+                        try: cap.release()
+                        except Exception: pass
             cameras.append((idx, label))
 
         # Beste (echte) Kamera ermitteln
@@ -595,14 +602,26 @@ class CameraWindow:
         self._preview_thread.start()
 
     def _stop_preview(self):
+        """
+        Stoppt den Preview-Thread sauber.
+        BUG-003: kein time.sleep() auf dem Main-Thread mehr.
+        BUG-014: Thread wird mit Timeout ge-joined damit kein doppelter
+                 Zugriff auf self._cap / self._canvas_tk_img entsteht.
+        Darf von beliebigem Thread aus aufgerufen werden.
+        """
         self._running = False
-        if self._cap:
+        # Kamera sofort freigeben damit der Thread nicht in read() haengt
+        cap = self._cap
+        if cap is not None:
+            self._cap = None
             try:
-                self._cap.release()
+                cap.release()
             except Exception:
                 pass
-            self._cap = None
-        time.sleep(0.3)
+        # Thread joinen (max 1 s) — vermeidet Race auf self._cap beim Neustart
+        t = self._preview_thread
+        if t is not None and t.is_alive():
+            t.join(timeout=1.0)
 
     def _preview_loop(self, cam_idx: int):
         """Liest Frames und sendet sie via after() in den Hauptthread."""
@@ -643,18 +662,18 @@ class CameraWindow:
             except Exception:
                 pass
 
-            # PIL → CTkImage → UI
+            # PIL-Bild erzeugen und via after() an den Canvas senden
+            # BUG-013: kein _light_image-Hack mehr — PIL direkt uebergeben
+            # BUG-027: nur EIN pending after()-Call — neuer Frame ersetzt alten
             try:
                 from PIL import Image
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil = Image.fromarray(rgb)
                 pil.thumbnail((530, 400), Image.LANCZOS)
-                ctk_img = ctk.CTkImage(
-                    light_image=pil, dark_image=pil,
-                    size=(pil.width, pil.height),
-                )
                 if self._win and self._win.winfo_exists():
-                    self._win.after(0, self._update_preview, ctk_img)
+                    # Atomisch: altes pending-Flag setzen, neues Bild einreihen
+                    self._pending_frame = pil   # BUG-027: letztes Bild merken
+                    self._win.after(0, self._update_preview_pil, pil)
             except Exception as e:
                 logger.debug(f"Frame-Fehler: {e}")
 
@@ -698,19 +717,29 @@ class CameraWindow:
         except Exception:
             pass
 
-    def _update_preview(self, img):
-        """Empfaengt ein neues CTkImage und zeichnet es zentriert auf dem Canvas."""
+    def _update_preview_pil(self, pil_img):
+        """
+        Hauptthread-Callback: PIL-Bild → tk.PhotoImage → Canvas.
+        BUG-013: kein _light_image-Hack mehr.
+        BUG-027: ignoriert Frame wenn inzwischen ein neuerer pending ist.
+        """
         try:
             if not (self._preview_canvas and self._win and self._win.winfo_exists()):
                 return
-            # CTkImage → PIL → PhotoImage fuer tk.Canvas
-            pil_img = img._light_image  # internes PIL-Bild aus CTkImage
+            # BUG-027: Frame verwerfen wenn bereits ein neueres Bild wartet
+            if pil_img is not self._pending_frame:
+                return
             import tkinter as tk
             tk_img = tk.PhotoImage(data=_pil_to_png_bytes(pil_img))
             self._canvas_tk_img = tk_img   # GC-Schutz
+            self._pending_frame = None
             self._draw_canvas_image(tk_img)
         except Exception as e:
-            pass
+            logger.debug(f"Preview-Update-Fehler: {e}")
+
+    def _update_preview(self, img):
+        """Legacy-Compat fuer alten CTkImage-Aufruf (nicht mehr verwendet intern)."""
+        pass
 
     # ── Kamera neu starten ────────────────────────────────────────────────────
 

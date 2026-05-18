@@ -242,6 +242,12 @@ class SpeechSynthesizer:
         if pipeline:
             pipeline.stop()
 
+    def reset_pipeline(self):
+        """BUG-001: Setzt Pipeline-State sicher zurueck ohne externen Lock-Zugriff."""
+        with self._lock:
+            self._active_pipeline = None
+            self._speaking = False
+
     # ------------------------------------------------------------------
     # edge-tts (online, hochwertig) — alles im Speicher, kein Temp-File
     # ------------------------------------------------------------------
@@ -272,14 +278,16 @@ class SpeechSynthesizer:
     # ------------------------------------------------------------------
 
     def _get_fallback(self) -> pyttsx3.Engine:
-        if self._fallback is None:
-            self._fallback = pyttsx3.init()
-            self._fallback.setProperty("rate", 175)
-            for v in self._fallback.getProperty("voices"):
-                if "german" in v.name.lower() or "de_" in v.id.lower():
-                    self._fallback.setProperty("voice", v.id)
-                    break
-        return self._fallback
+        # BUG-032: Initialisierung des Fallback-Engines unter Lock schuetzen
+        with self._lock:
+            if self._fallback is None:
+                self._fallback = pyttsx3.init()
+                self._fallback.setProperty("rate", 175)
+                for v in self._fallback.getProperty("voices"):
+                    if "german" in v.name.lower() or "de_" in v.id.lower():
+                        self._fallback.setProperty("voice", v.id)
+                        break
+            return self._fallback
 
     def _speak_fallback(self, text: str):
         try:

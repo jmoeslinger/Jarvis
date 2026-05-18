@@ -263,7 +263,7 @@ class SpeechRecognizer:
         def _stop(wait_for_stop: bool = False):
             stop_event.set()
             if wait_for_stop:
-                t.join(timeout=0.5)
+                t.join(timeout=2.0)  # BUG-020: 500ms zu kurz, Loop braucht bis zu 2s
 
         return _stop
 

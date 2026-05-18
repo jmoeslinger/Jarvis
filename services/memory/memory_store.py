@@ -244,8 +244,12 @@ class MemoryStore:
             return f"Gespeichert: {info}"
 
     def update(self, search_term: str, new_info: str, category: str = "") -> str:
-        """Überschreibt einen vorhandenen Eintrag (Korrektur)."""
+        """Überschreibt einen vorhandenen Eintrag (Korrektur).
+        BUG-023: _maybe_reload() vor der Suche — verhindert TOCTOU wenn Datei
+        extern geändert wurde, bevor update() die Suche startet.
+        """
         with self._lock:
+            self._maybe_reload()   # BUG-023: reload under lock, not just in remember()
             entry = self._find_similar(search_term, cutoff=0.55)
             if not entry:
                 # Nichts gefunden → neu anlegen (Lock wird freigegeben, remember() holt ihn erneut)

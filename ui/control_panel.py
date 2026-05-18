@@ -86,6 +86,9 @@ class ControlPanel:
         # Kamera-Fenster
         self._camera_window = None
 
+        # BUG-022: Verhindert mehrere parallele Retry-Ketten in show()
+        self._show_pending = False
+
         self._jarvis.on_state_change(self._on_state)
         self._jarvis.on_message(self._on_message)
         self._jarvis.on_task_update(self._on_task_update)
@@ -100,16 +103,27 @@ class ControlPanel:
         """
         Panel öffnen/in Vordergrund bringen.
         Wartet per Timer bis der HUD-Root bereit ist (maximal 10 Sekunden).
+        BUG-022: _show_pending verhindert mehrere parallele Retry-Ketten.
         """
         root = getattr(self._hud, "_root", None)
         if root and root.winfo_exists():
+            self._show_pending = False
             self._hud_root = root
             root.after(0, self._open_or_show)
+        elif _retries == 0:
+            # Erste show()-Anfrage: nur starten wenn keine Kette läuft
+            if self._show_pending:
+                return
+            self._show_pending = True
+            t = threading.Timer(0.3, self.show, kwargs={"_retries": 1})
+            t.daemon = True
+            t.start()
         elif _retries < 33:   # max. 33 × 0.3s ≈ 10 Sekunden
             t = threading.Timer(0.3, self.show, kwargs={"_retries": _retries + 1})
             t.daemon = True
             t.start()
         else:
+            self._show_pending = False
             logger.warning("ControlPanel.show(): HUD-Root nicht verfügbar nach 10s.")
 
     def is_alive(self) -> bool:
@@ -720,21 +734,32 @@ class ControlPanel:
         ).start()
 
     def _act_chat(self):
+        # BUG-040: ChatWindow darf nicht im Nicht-Hauptthread erstellt werden.
+        # Öffnen immer im Hauptthread via after(); der run()-Mainloop läuft separat.
         if self._chat_thread and self._chat_thread.is_alive():
             # Thread läuft noch — Fenster war evtl. nur minimiert → wieder zeigen
             if self._chat_window:
                 try:
-                    self._chat_window.show()
+                    if self._hud_root:
+                        self._hud_root.after(0, self._chat_window.show)
+                    else:
+                        self._chat_window.show()
                 except Exception:
                     pass
+            return
+        # Neues Fenster: zuerst ChatWindow-Objekt im Hauptthread anlegen,
+        # dann run() (Mainloop) in eigenem Thread starten.
+        try:
+            from ui.chat_window import ChatWindow
+            self._chat_window = ChatWindow(self._jarvis)
+        except Exception as e:
+            logger.error(f"Chat erstellen: {e}")
             return
         self._chat_thread = threading.Thread(target=self._run_chat, daemon=True)
         self._chat_thread.start()
 
     def _run_chat(self):
         try:
-            from ui.chat_window import ChatWindow
-            self._chat_window = ChatWindow(self._jarvis)
             self._chat_window.run()
         except Exception as e:
             logger.error(f"Chat: {e}")

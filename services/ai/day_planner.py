@@ -23,9 +23,10 @@ class DayPlanner:
 
     def __init__(self):
         _DATA_DIR.mkdir(parents=True, exist_ok=True)
-        self._lock:  threading.Lock = threading.Lock()
-        self._today: str = str(date.today())
-        self._tasks: List[Dict] = []
+        self._lock:    threading.Lock = threading.Lock()
+        self._today:   str = str(date.today())
+        self._tasks:   List[Dict] = []
+        self._next_id: int = 0   # BUG-017: monoton steigender Zaehler statt len()
         self._load()
 
     # ── Persistenz ────────────────────────────────────────────────────────────
@@ -36,17 +37,26 @@ class DayPlanner:
                 data = json.loads(_PLAN_FILE.read_text("utf-8"))
                 if isinstance(data, dict) and data.get("date") == self._today:
                     self._tasks = data.get("tasks", [])
+                    # BUG-017: next_id aus gespeichertem Wert oder max(ID)+1 ableiten
+                    self._next_id = data.get(
+                        "next_id",
+                        max((t.get("id", 0) for t in self._tasks), default=-1) + 1,
+                    )
                     logger.info(f"Tagesplan geladen: {len(self._tasks)} Aufgaben")
                     return
         except Exception as e:
             logger.warning(f"Tagesplan-Laden: {e}")
         self._tasks = []
+        self._next_id = 0
 
     def _save(self):
         try:
             tmp = _PLAN_FILE.with_suffix(".tmp")
             tmp.write_text(
-                json.dumps({"date": self._today, "tasks": self._tasks}, ensure_ascii=False, indent=2),
+                json.dumps(
+                    {"date": self._today, "tasks": self._tasks, "next_id": self._next_id},
+                    ensure_ascii=False, indent=2,
+                ),
                 encoding="utf-8",
             )
             tmp.replace(_PLAN_FILE)
@@ -59,6 +69,7 @@ class DayPlanner:
         if today != self._today:
             self._today = today
             self._tasks = []
+            self._next_id = 0  # BUG-017: Counter bei Tageswechsel zuruecksetzen
             self._save()
             logger.info("Tageswechsel — Tagesplan zurueckgesetzt.")
 
@@ -73,12 +84,13 @@ class DayPlanner:
         with self._lock:
             self._check_day_reset()
             entry = {
-                "id":        len(self._tasks),
+                "id":        self._next_id,   # BUG-017: eindeutiger monotoner Zaehler
                 "task":      task.strip(),
                 "priority":  priority,
                 "time_hint": time_hint,
                 "done":      False,
             }
+            self._next_id += 1   # BUG-017: nach Eintrag erhoehen
             self._tasks.append(entry)
             self._save()
             icons = {"high": "Hoch", "normal": "Normal", "low": "Niedrig"}

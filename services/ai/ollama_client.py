@@ -43,19 +43,29 @@ class OllamaClient(GrokClient):
                  get_memories=None):
         from openai import OpenAI
         # GrokClient.__init__ nicht aufrufen — direkt initialisieren
-        self._client        = OpenAI(api_key="ollama", base_url=base_url)
-        self._model         = model
-        self._history       = []
-        self._tools         = {}
-        self._get_memories  = get_memories
-        self._current_query = ""
-        self._MAX_HISTORY   = 6   # lokale Modelle haben kleineres Kontextfenster
-        self._length_hint   = ""
-        self._tone_hint     = ""
-        self._multi_step    = False
-        self._task_planning = False
-        self._parallel_tasks = False
-        self._base_url      = base_url
+        # BUG-025: alle GrokClient-Attribute explizit setzen um AttributeError zu vermeiden
+        self._client            = OpenAI(api_key="ollama", base_url=base_url)
+        self._model             = model
+        self._history           = []
+        self._tools             = {}
+        self._get_memories      = get_memories
+        self._current_query     = ""
+        self._MAX_HISTORY       = 6        # lokale Modelle: kleineres Kontextfenster
+        self._length_hint       = ""
+        self._tone_hint         = ""
+        self._multi_step        = False
+        self._task_planning     = False
+        self._parallel_tasks    = False
+        self._base_url          = base_url
+        # Weitere GrokClient-Attribute die via set_*() gesetzt werden koennen
+        self._personality       = "assistant"
+        self._personality_custom = ""
+        self._context_provider  = None    # BUG-025: fehlt sonst in _build_system_prompt
+        self._adaptive_max_tokens: bool = False  # BUG-025
+        self._noise_filter      = False
+        self._long_term_context = False
+        self._style_learner     = None
+        self._adaptive_responses = False
         logger.info(f"Ollama-Client initialisiert: {base_url} / {model}")
 
     def _build_system_prompt(self) -> str:

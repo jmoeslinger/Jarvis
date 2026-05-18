@@ -44,14 +44,16 @@ class ProactiveEngine:
         self._is_idle        = is_idle
         self._get_open_tasks = get_open_tasks
 
-        self._running  = False
-        self._thread:  Optional[threading.Thread] = None
+        self._running    = False
+        self._thread:    Optional[threading.Thread] = None
+        self._stop_event = threading.Event()          # BUG-028: sofortiger stop()
         self._last_suggestion_t: float = 0.0
 
     def start(self):
         if self._running:
             return
         self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._loop, daemon=True, name="ProactiveEngine"
         )
@@ -60,21 +62,25 @@ class ProactiveEngine:
 
     def stop(self):
         self._running = False
+        self._stop_event.set()  # BUG-028: unterbricht sofort jeden sleep()
         logger.info("ProactiveEngine gestoppt.")
 
     # ── Interner Loop ──────────────────────────────────────────────────────────
 
     def _loop(self):
-        # Startverzoegerung: erst nach 2 Minuten aktiv werden
-        time.sleep(120)
+        # Startverzoegerung: erst nach 2 Minuten aktiv werden (BUG-028: unterbrechbar)
+        self._stop_event.wait(timeout=120)
+        if not self._running:
+            return
 
         while self._running:
             try:
                 self._tick()
             except Exception as e:
                 logger.debug(f"ProactiveEngine Tick-Fehler: {e}")
-            # Alle 5 Minuten pruefen
-            time.sleep(300)
+            # Alle 5 Minuten pruefen — sofort unterbrechbar (BUG-028)
+            self._stop_event.wait(timeout=300)
+            self._stop_event.clear()
 
     def _tick(self):
         now = datetime.now()

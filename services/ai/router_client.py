@@ -12,6 +12,7 @@ Fallback-Reihenfolge (auto):
 """
 
 import logging
+import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple, Any
 
@@ -38,6 +39,7 @@ class RouterClient:
         self._active_idx = 0
         self._cooldowns: Dict[str, float] = {}   # name → epoch when available again
         self._history: List[Dict[str, Any]] = []
+        self._history_lock = threading.Lock()    # BUG-011: History thread-sicher sperren
         self._tools: Dict[str, Callable] = {}
 
         logger.info(
@@ -173,10 +175,18 @@ class RouterClient:
         return ""
 
     def clear_history(self):
-        self._history.clear()
+        with self._history_lock:
+            self._history.clear()
         for _, client in self._providers:
             client.clear_history()
         logger.info("Gesprächsverlauf (alle Provider) gelöscht.")
+
+    def restore_history(self, history: list):
+        """BUG-002: Thread-sicheres Wiederherstellen der History fuer alle Provider."""
+        with self._history_lock:
+            self._history = list(history)
+            for _, client in self._providers:
+                client._history = list(history)
 
     # ── Routing-Kern ──────────────────────────────────────────────────────────
 
@@ -214,11 +224,13 @@ class RouterClient:
 
     def _sync_to(self, client):
         """Setzt die History des Clients auf den aktuellen Router-Stand."""
-        client._history = list(self._history)
+        with self._history_lock:
+            client._history = list(self._history)
 
     def _sync_from(self, client):
         """Übernimmt die History nach einem erfolgreichen Call."""
-        self._history = list(client._history)
+        with self._history_lock:
+            self._history = list(client._history)
 
     # ── Chat-Methoden (gleiche API wie GrokClient) ────────────────────────────
 

@@ -49,6 +49,15 @@ _KNOWN_TOOL_NAMES = {
     "analyze_camera", "add_day_task", "get_day_plan", "complete_day_task",
 }
 
+# BUG-031: Regex auf Modulebene kompilieren statt bei jedem Aufruf
+_SPLIT_PATTERN = re.compile(
+    r"(?:,?\s+(?:und\s+dann|und\s+danach|und\s+außerdem|danach|"
+    r"außerdem|dann\s+auch|dann\s+bitte|anschließend|daneben|"
+    r"zusätzlich\s+(?:dazu\s+)?(?:auch\s+)?)|"
+    r";\s*)",
+    re.IGNORECASE,
+)
+
 _TONE_HINTS = {
     "formal":    (
         "Antworte formell und höflich. Benutze Sie-Anrede. "
@@ -204,6 +213,7 @@ class JarvisCore:
         # ── Sprach-Analyse ────────────────────────────────────────────────────
         self._speaker_id = None     # SpeakerIdentifier (lazy init)
         self._interrupt_active = threading.Event()   # verhindert parallele Monitore
+        self._ww_init_lock = threading.Lock()        # BUG-012: verhindert doppelten WW-Init
 
         # Smart-Pause in Recognizer aktivieren
         if settings.smart_pause:
@@ -265,10 +275,8 @@ class JarvisCore:
         if self.settings.conversation_resume:
             history = self.conversation_log.get_last_session_history()
             if history:
-                # RouterClient-History und alle Provider-Clients synchron setzen
-                self.grok._history = list(history)
-                for _, client in self.grok._providers:
-                    client._history = list(history)
+                # BUG-002: thread-safe via oeffentliche Methode statt direkter Mutation
+                self.grok.restore_history(history)
                 turns = len(history) // 2
                 self._notify("system", f"🔄 Gespräch fortgesetzt ({turns} Turns geladen)")
                 logger.info(f"Gespräch fortgesetzt: {len(history)} History-Einträge")
@@ -374,25 +382,30 @@ class JarvisCore:
         Bei Aktivierung wird openwakeword geladen (einmalig ~5 MB Download).
         """
         if enabled and self._local_ww_detector is None:
+            # BUG-012: Lock verhindert gleichzeitige Doppelinitialisierung
+            if not self._ww_init_lock.acquire(blocking=False):
+                return   # Init laeuft bereits
             # Detector noch nicht initialisiert → jetzt laden (kann dauern)
             self._notify("system", "🎯 Lade lokales Wake-Word Modell …")
 
             def _init_and_apply():
-                ok = self._init_local_ww_detector(silent=False)
-                if ok:
-                    self.settings.local_wake_word = True
-                    self.settings.save()
-                    self._fire_settings_changed()
-                    self._notify("system", "🎯 Lokale Wake-Word Erkennung AN (offline)")
-                    # Listener neu starten mit lokalem Detektor
-                    if self.state == State.WAKE_LISTENING and self._running:
-                        self._stop_bg_listen_safe(wait=True)
-                        self._start_bg_listen()
-                else:
-                    # Init fehlgeschlagen — Settings zurücksetzen + UI informieren
-                    self.settings.local_wake_word = False
-                    self.settings.save()
-                    self._fire_settings_changed()
+                # BUG-012: Lock in finally freigeben damit doppelter Aufruf moeglich bleibt
+                try:
+                    ok = self._init_local_ww_detector(silent=False)
+                    if ok:
+                        self.settings.local_wake_word = True
+                        self.settings.save()
+                        self._fire_settings_changed()
+                        self._notify("system", "🎯 Lokale Wake-Word Erkennung AN (offline)")
+                        if self.state == State.WAKE_LISTENING and self._running:
+                            self._stop_bg_listen_safe(wait=True)
+                            self._start_bg_listen()
+                    else:
+                        self.settings.local_wake_word = False
+                        self.settings.save()
+                        self._fire_settings_changed()
+                finally:
+                    self._ww_init_lock.release()   # BUG-012
 
             threading.Thread(target=_init_and_apply, daemon=True).start()
             return
@@ -700,7 +713,9 @@ class JarvisCore:
                 while self.state == State.SPEAKING and self._running:
                     try:
                         chunk, _ = stream.read(_MONITOR_CHUNK)
-                    except Exception:
+                    except Exception as _audio_err:
+                        # BUG-007: Fehler loggen statt still schlucken
+                        logger.debug(f"Interrupt-Monitor Audio-Fehler: {_audio_err}")
                         break
 
                     samples = chunk[:, 0].astype(_np.float64)
@@ -856,17 +871,8 @@ class JarvisCore:
         Zerlegt einen Satz mit mehreren Befehlen in Einzelbefehle.
         Erkennt deutsche Verbindungswörter: 'und dann', 'danach', 'außerdem', etc.
         Gibt immer mindestens eine Liste mit einem Element zurück.
+        BUG-031: Regex ist jetzt Modul-Konstante _SPLIT_PATTERN (kein recompile).
         """
-        import re
-        # Trennmuster: Konjunktionen die neue Teilbefehle einleiten
-        # Reihenfolge: längere Muster zuerst um Überschneidungen zu vermeiden
-        _SPLIT_PATTERN = re.compile(
-            r"(?:,?\s+(?:und\s+dann|und\s+danach|und\s+außerdem|danach|"
-            r"außerdem|dann\s+auch|dann\s+bitte|anschließend|daneben|"
-            r"zusätzlich\s+(?:dazu\s+)?(?:auch\s+)?)|"
-            r";\s*)",
-            re.IGNORECASE,
-        )
         parts = _SPLIT_PATTERN.split(text.strip())
         # Nur nicht-leere Teile mit mindestens 4 Zeichen behalten
         result = [p.strip() for p in parts if p and len(p.strip()) >= 4]
@@ -1492,14 +1498,16 @@ class JarvisCore:
 
             # Pipeline abschließen (flusht restlichen Buffer + wartet)
             pipeline.finish()
-            with self.synthesizer._lock:
-                self.synthesizer._active_pipeline = None
-                self.synthesizer._speaking = False
+            # BUG-001: reset_pipeline() statt direktem Lock-Zugriff von aussen
+            self.synthesizer.reset_pipeline()
 
             # Finale Nachricht: Function-Call-XML aus der Anzeige entfernen
             clean_response = re.sub(r"<function=.*?</function>", "", full_response,
                                     flags=re.DOTALL).strip()
-            self._notify("assistant", clean_response or full_response)
+            # BUG-021: leere Antworten nicht als Assistent-Nachricht anzeigen
+            display = clean_response or full_response
+            if display:
+                self._notify("assistant", display)
 
             # Konfidenz-Score berechnen und broadcasten
             confidence = self._compute_confidence(
@@ -1516,9 +1524,8 @@ class JarvisCore:
                     pipeline.stop()
                 except Exception:
                     pass
-            with self.synthesizer._lock:
-                self.synthesizer._active_pipeline = None
-                self.synthesizer._speaking = False
+            # BUG-001: reset_pipeline() statt direktem Lock-Zugriff von aussen
+            self.synthesizer.reset_pipeline()
             self.synthesizer.speak("Es gab leider einen Fehler.")
             self._set_state(State.ERROR)
             self._notify("confidence", "0")
@@ -1588,7 +1595,18 @@ class JarvisCore:
         return google_first_result(query)
 
     def _tool_set_timer(self, seconds: int, label: str = "Timer") -> str:
+        # BUG-018: negative / Null-Werte abweisen
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            return "Fehler: Timer-Dauer muss eine Zahl sein."
+        if seconds <= 0:
+            return "Fehler: Timer-Dauer muss groesser als 0 Sekunden sein."
+
         def _ring():
+            # BUG-019: nicht feuern wenn Jarvis bereits gestoppt wurde
+            if not self._running:
+                return
             try:
                 logger.info(f"Timer abgelaufen: '{label}'")
                 import winsound

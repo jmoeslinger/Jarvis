@@ -113,7 +113,7 @@ class VisionAnalyzer:
             api_key=self._groq_key,
             base_url="https://api.groq.com/openai/v1",
         )
-        last_err = None
+        last_err: Exception = RuntimeError("Kein Groq Vision-Modell verfuegbar.")  # BUG-016
         for model in self._GROQ_VISION_MODELS:
             try:
                 response = client.chat.completions.create(
@@ -142,7 +142,7 @@ class VisionAnalyzer:
                     last_err = e
                     continue
                 raise  # Anderer Fehler (Netz, Auth) → direkt weitergeben
-        raise last_err or RuntimeError("Kein Groq Vision-Modell verfuegbar.")
+        raise last_err
 
     def _analyze_gemini(self, image_b64: str, question: str) -> str:
         url = (
