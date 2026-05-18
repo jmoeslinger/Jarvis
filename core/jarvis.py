@@ -259,8 +259,10 @@ class JarvisCore:
         self._settings_listeners.append(cb)
 
     def _fire_settings_changed(self):
-        """Informiert alle Settings-Listener (z. B. Control Panel)."""
-        for cb in self._settings_listeners:
+        """Informiert alle Settings-Listener (z. B. Control Panel).
+        BUG-062: Snapshot der Liste vor Iteration — verhindert Race bei gleichzeitigem append().
+        """
+        for cb in list(self._settings_listeners):
             try:
                 cb()
             except Exception as exc:
@@ -957,6 +959,7 @@ class JarvisCore:
         Wartet falls Jarvis durch die Sprach-Aktivierung beschäftigt ist.
         """
         # Kurz warten wenn Voice-Flow gerade aktiv ist (max. 30s)
+        # BUG-065: cancel_event.wait() statt time.sleep() — Abbruch wird sofort bemerkt
         wait_s = 0.0
         while self.state in (State.PROCESSING, State.SPEAKING, State.CMD_LISTENING):
             if cancel_event and cancel_event.is_set():
@@ -964,7 +967,10 @@ class JarvisCore:
             if wait_s > 30:
                 self._notify("system", "⚠ Task-Timeout: Jarvis war zu lange beschäftigt.")
                 return
-            time.sleep(0.2)
+            if cancel_event:
+                cancel_event.wait(timeout=0.2)
+            else:
+                time.sleep(0.2)
             wait_s += 0.2
 
         was_listening = self.state == State.WAKE_LISTENING
@@ -1087,8 +1093,10 @@ class JarvisCore:
             )
 
     def _on_task_update(self, task_list: List[Dict]):
-        """Wird vom TaskManager aufgerufen — leitet Updates an UI-Listener weiter."""
-        for cb in self._task_listeners:
+        """Wird vom TaskManager aufgerufen — leitet Updates an UI-Listener weiter.
+        BUG-062: Snapshot der Liste vor Iteration — verhindert Race bei gleichzeitigem append().
+        """
+        for cb in list(self._task_listeners):
             try:
                 cb(task_list)
             except Exception as exc:
@@ -1114,14 +1122,16 @@ class JarvisCore:
 
     def _set_state(self, state: State):
         self.state = state
-        for cb in self._state_listeners:
+        # BUG-062: Snapshot der Liste vor Iteration — verhindert Race bei gleichzeitigem append()
+        for cb in list(self._state_listeners):
             try:
                 cb(state)
             except Exception as e:
                 logger.error(f"State-Listener Fehler: {e}")
 
     def _notify(self, role: str, content: str):
-        for cb in self._message_listeners:
+        # BUG-062: Snapshot der Liste vor Iteration
+        for cb in list(self._message_listeners):
             try:
                 cb(role, content)
             except Exception as e:
