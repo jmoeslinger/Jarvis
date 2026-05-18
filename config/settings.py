@@ -57,6 +57,28 @@ class Settings:
     adaptive_response_time: bool = False  # max_tokens je Befehlskomplexität anpassen
     adaptive_responses: bool = False    # Adaptives Verhalten (Stil + Reaktionszeit)
 
+    # ── Persoenlichkeit ───────────────────────────────────────────────────────
+    personality: str = "assistant"   # "assistant"|"friend"|"butler"|"coach"|"scientist"|"custom"
+    personality_custom: str = ""     # Eigene Persoenlichkeits-Beschreibung (wenn custom)
+
+    # ── Mood-basierte Antworten ────────────────────────────────────────────────
+    mood_based_responses: bool = False  # Stimmung des Nutzers in Antwort-Stil einbeziehen
+
+    # ── Proaktive Vorschlaege ─────────────────────────────────────────────────
+    proactive_suggestions: bool = False  # Jarvis macht eigenstaendig Vorschlaege
+
+    # ── Tagesplanung ──────────────────────────────────────────────────────────
+    day_planning: bool = False          # Tagesplan-Feature aktivieren
+
+    # ── App Integration ───────────────────────────────────────────────────────
+    custom_apps: dict = field(default_factory=dict)  # {"App-Name": "C:\\path\\to\\app.exe"}
+
+    # ── Vision ────────────────────────────────────────────────────────────────
+    vision_enabled: bool = False        # Kamera-Feature aktivieren
+    vision_camera_index: int = 0        # Kamera-Index (0 = Standard)
+    gemini_api_key: str = ""            # Google Gemini API Key (optional, kostenlos)
+    vision_ollama_model: str = "moondream"  # Lokales Vision-Modell
+
     # Wiederholende Tasks — gespeichert als Liste von Dicts:
     # [{id, label, interval_minutes, command}, ...]
     recurring_tasks: List[Dict] = field(default_factory=list)
@@ -82,6 +104,8 @@ class Settings:
                     current = getattr(self, key)
                     if isinstance(current, list) and not isinstance(value, list):
                         continue   # Listenfeld bleibt beim Default
+                    if isinstance(current, dict) and not isinstance(value, dict):
+                        continue   # Dictfeld bleibt beim Default
                     if isinstance(current, bool) and not isinstance(value, bool):
                         # JSON int (0/1) als bool tolerieren, sonst überspringen
                         if isinstance(value, int):

@@ -157,6 +157,12 @@ class RouterClient:
             if hasattr(client, "set_adaptive_max_tokens"):
                 client.set_adaptive_max_tokens(max_tokens)
 
+    def set_personality(self, preset: str, custom_text: str = ""):
+        """Setzt das Persoenlichkeitsprofil fuer alle Provider."""
+        for _, client in self._providers:
+            if hasattr(client, "set_personality"):
+                client.set_personality(preset, custom_text)
+
     def get_last_response(self) -> str:
         """Gibt die letzte Assistenten-Antwort aus der History zurück."""
         for msg in reversed(self._history):

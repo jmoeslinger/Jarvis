@@ -378,6 +378,152 @@ class SettingsWindow:
             font=ctk.CTkFont(size=11), text_color="#333355",
         ).pack(anchor="w", padx=20, pady=(0, 16))
 
+        # ── Abschnitt: Persoenlichkeit ────────────────────────────────
+        self._section(scroll, "Persoenlichkeit")
+        pers_card = self._card(scroll)
+
+        self._label(pers_card, "Charakter-Preset", "Wie soll Jarvis sich verhalten?")
+        _PERSONALITY_PRESETS = [
+            "assistant", "friend", "butler", "coach", "scientist", "custom"
+        ]
+        _PERSONALITY_LABELS = {
+            "assistant":  "Assistent (Standard)",
+            "friend":     "Freund (locker, du-Form)",
+            "butler":     "Butler (formell, Sie-Form)",
+            "coach":      "Coach (motivierend)",
+            "scientist":  "Wissenschaftler (analytisch)",
+            "custom":     "Eigene Beschreibung",
+        }
+        self._personality_var = ctk.StringVar(
+            value=_PERSONALITY_LABELS.get(self._settings.personality, "Assistent (Standard)")
+        )
+        self._personality_display_to_key = {v: k for k, v in _PERSONALITY_LABELS.items()}
+        ctk.CTkOptionMenu(
+            pers_card,
+            values=[_PERSONALITY_LABELS[k] for k in _PERSONALITY_PRESETS],
+            variable=self._personality_var,
+            height=38, fg_color="#14142A",
+            button_color="#1A3A8A", button_hover_color="#2244AA",
+            dropdown_fg_color="#0E0E1E", font=ctk.CTkFont(size=12),
+        ).pack(fill="x", padx=20, pady=(0, 8))
+
+        self._label(pers_card, "Eigene Beschreibung", "Nur wenn 'Eigene' gewaehlt")
+        self._personality_custom_entry = ctk.CTkEntry(
+            pers_card, height=38,
+            font=ctk.CTkFont(size=12),
+            fg_color="#14142A", border_color="#222244",
+            text_color="#D0D0E8",
+            placeholder_text="z.B. 'Antworte immer mit Wiener Dialekt und Humor'",
+        )
+        self._personality_custom_entry.insert(0, self._settings.personality_custom)
+        self._personality_custom_entry.pack(fill="x", padx=20, pady=(0, 16))
+
+        # ── Abschnitt: Vision ─────────────────────────────────────────
+        self._section(scroll, "Vision (Kamera)")
+        vision_card = self._card(scroll)
+
+        self._vision_enabled_var = ctk.BooleanVar(value=self._settings.vision_enabled)
+        ctk.CTkCheckBox(
+            vision_card,
+            text="Kamera-Feature aktivieren",
+            variable=self._vision_enabled_var,
+            font=ctk.CTkFont(size=13), text_color="#AAAACC",
+            checkmark_color="#3366FF", fg_color="#1A3A8A",
+            hover_color="#2244AA", border_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(14, 4))
+        ctk.CTkLabel(
+            vision_card,
+            text="Jarvis kann Fotos aufnehmen und mit Vision-KI analysieren",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        self._label(vision_card, "Kamera-Index", "0 = Standard-Webcam")
+        self._cam_idx_var = ctk.IntVar(value=self._settings.vision_camera_index)
+        cam_row = ctk.CTkFrame(vision_card, fg_color="transparent")
+        cam_row.pack(fill="x", padx=20, pady=(0, 8))
+        self._cam_idx_lbl = ctk.CTkLabel(
+            cam_row, text=str(self._settings.vision_camera_index),
+            font=ctk.CTkFont(size=12), text_color="#8888AA", width=28,
+        )
+        self._cam_idx_lbl.pack(side="right")
+        ctk.CTkSlider(
+            cam_row, from_=0, to=4,
+            variable=self._cam_idx_var,
+            command=lambda v: self._cam_idx_lbl.configure(text=str(int(float(v)))),
+            height=20, progress_color="#1A3A8A", number_of_steps=4,
+        ).pack(side="left", fill="x", expand=True)
+
+        self._label(vision_card, "Gemini API Key", "Kostenloser Google-Key (optional)")
+        self._gemini_key_entry = ctk.CTkEntry(
+            vision_card, height=38,
+            font=ctk.CTkFont(size=12),
+            fg_color="#14142A", border_color="#222244",
+            text_color="#D0D0E8", show="*",
+            placeholder_text="AIza... (leer lassen um Groq zu verwenden)",
+        )
+        self._gemini_key_entry.insert(0, self._settings.gemini_api_key)
+        self._gemini_key_entry.pack(fill="x", padx=20, pady=(0, 8))
+
+        self._label(vision_card, "Ollama Vision-Modell", "Fallback wenn kein API-Key")
+        self._ollama_vision_var = ctk.StringVar(value=self._settings.vision_ollama_model)
+        ctk.CTkOptionMenu(
+            vision_card,
+            values=["moondream", "llava", "llava:13b", "bakllava"],
+            variable=self._ollama_vision_var,
+            height=38, fg_color="#14142A",
+            button_color="#1A3A8A", button_hover_color="#2244AA",
+            dropdown_fg_color="#0E0E1E", font=ctk.CTkFont(size=12),
+        ).pack(fill="x", padx=20, pady=(0, 16))
+
+        # ── Abschnitt: App Integration ────────────────────────────────
+        self._section(scroll, "App Integration")
+        apps_card = self._card(scroll)
+
+        ctk.CTkLabel(
+            apps_card,
+            text="Eigene Apps hinzufuegen (Name → Pfad zur .exe)",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(12, 6))
+
+        # Scrollbare Liste
+        self._apps_frame = ctk.CTkScrollableFrame(
+            apps_card, fg_color="#0A0A18", corner_radius=6, height=100,
+            scrollbar_button_color="#1A1A30",
+        )
+        self._apps_frame.pack(fill="x", padx=20, pady=(0, 6))
+        self._app_rows: list = []
+        self._refresh_apps_ui()
+
+        # Hinzufuegen-Zeile
+        add_row = ctk.CTkFrame(apps_card, fg_color="transparent")
+        add_row.pack(fill="x", padx=20, pady=(0, 6))
+        self._new_app_name = ctk.CTkEntry(
+            add_row, height=32, width=100,
+            font=ctk.CTkFont(size=11),
+            fg_color="#14142A", border_color="#222244",
+            text_color="#D0D0E8", placeholder_text="Name",
+        )
+        self._new_app_name.pack(side="left")
+        self._new_app_path = ctk.CTkEntry(
+            add_row, height=32,
+            font=ctk.CTkFont(size=11),
+            fg_color="#14142A", border_color="#222244",
+            text_color="#D0D0E8", placeholder_text="C:\\Pfad\\app.exe",
+        )
+        self._new_app_path.pack(side="left", fill="x", expand=True, padx=(4, 4))
+        ctk.CTkButton(
+            add_row, text="+", width=32, height=32,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#1A3A8A", hover_color="#2244AA", corner_radius=6,
+            command=self._add_custom_app,
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            apps_card,
+            text="Jarvis kann diese Apps per Sprache starten (z.B. 'Oeffne Spotify')",
+            font=ctk.CTkFont(size=11), text_color="#333355",
+        ).pack(anchor="w", padx=20, pady=(0, 16))
+
         # ── Fehler & Speichern ────────────────────────────────────────
         self._err_lbl = ctk.CTkLabel(
             self._root, text="", text_color="#FF4455",
@@ -536,6 +682,58 @@ class SettingsWindow:
         self._mic_test_btn.configure(text="🎤 Mikrofon testen", state="normal")
 
     # ------------------------------------------------------------------
+    # App Integration Hilfsmethoden
+    # ------------------------------------------------------------------
+
+    def _refresh_apps_ui(self):
+        """Baut die App-Liste neu auf."""
+        for widget in self._apps_frame.winfo_children():
+            widget.destroy()
+        self._app_rows.clear()
+
+        apps = self._settings.custom_apps
+        if not apps:
+            ctk.CTkLabel(
+                self._apps_frame,
+                text="Keine eigenen Apps konfiguriert.",
+                font=ctk.CTkFont(size=10), text_color="#333355",
+            ).pack(anchor="w", padx=8, pady=4)
+            return
+
+        for name, path in apps.items():
+            row = ctk.CTkFrame(self._apps_frame, fg_color="#0E0E1E", corner_radius=4, height=28)
+            row.pack(fill="x", pady=1)
+            row.pack_propagate(False)
+            ctk.CTkLabel(
+                row, text=f"{name}: {path[:40]}{'...' if len(path) > 40 else ''}",
+                font=ctk.CTkFont(size=10), text_color="#9999BB", anchor="w",
+            ).place(x=6, rely=0.5, anchor="w")
+            ctk.CTkButton(
+                row, text="×", width=22, height=20,
+                fg_color="#3A0A0A", hover_color="#CC2233",
+                text_color="#FF6666", font=ctk.CTkFont(size=11),
+                corner_radius=3,
+                command=lambda n=name: self._remove_custom_app(n),
+            ).place(relx=1.0, x=-4, rely=0.5, anchor="e")
+            self._app_rows.append(row)
+
+    def _add_custom_app(self):
+        name = self._new_app_name.get().strip()
+        path = self._new_app_path.get().strip()
+        if not name or not path:
+            self._err_lbl.configure(text="Name und Pfad benoetigt.", text_color="#FF4455")
+            return
+        self._settings.custom_apps[name] = path
+        self._new_app_name.delete(0, "end")
+        self._new_app_path.delete(0, "end")
+        self._refresh_apps_ui()
+        self._err_lbl.configure(text="")
+
+    def _remove_custom_app(self, name: str):
+        self._settings.custom_apps.pop(name, None)
+        self._refresh_apps_ui()
+
+    # ------------------------------------------------------------------
     # Speichern
     # ------------------------------------------------------------------
 
@@ -584,6 +782,20 @@ class SettingsWindow:
         self._settings.style_learning           = self._style_learning_var.get()
         self._settings.adaptive_response_time   = self._adapt_time_var.get()
         self._settings.adaptive_responses       = self._adapt_resp_var.get()
+
+        # Persoenlichkeit
+        pers_label = self._personality_var.get()
+        pers_key = getattr(self, "_personality_display_to_key", {}).get(pers_label, "assistant")
+        self._settings.personality        = pers_key
+        self._settings.personality_custom = self._personality_custom_entry.get().strip()
+
+        # Vision
+        self._settings.vision_enabled       = self._vision_enabled_var.get()
+        self._settings.vision_camera_index  = int(self._cam_idx_var.get())
+        self._settings.gemini_api_key       = self._gemini_key_entry.get().strip()
+        self._settings.vision_ollama_model  = self._ollama_vision_var.get()
+
+        # custom_apps werden direkt in _settings.custom_apps gepflegt
         self._settings.save()
 
         # Live anwenden
@@ -630,6 +842,26 @@ class SettingsWindow:
                 self._jarvis.set_adaptive_responses(self._settings.adaptive_responses)
             except Exception as e:
                 logger.error(f"Feature-Settings Fehler: {e}")
+
+            # Neue Features live anwenden
+            try:
+                self._jarvis.set_personality(
+                    self._settings.personality,
+                    self._settings.personality_custom,
+                )
+                self._jarvis.set_vision_enabled(self._settings.vision_enabled)
+                # Kamera-Index und Vision-Config aktualisieren
+                self._jarvis.camera.set_camera_index(self._settings.vision_camera_index)
+                self._jarvis.vision.update_config(
+                    groq_api_key=self._settings.grok_api_key,
+                    gemini_api_key=self._settings.gemini_api_key,
+                    ollama_model=self._settings.vision_ollama_model,
+                )
+                # Custom Apps in AppLauncher uebertragen
+                if hasattr(self._jarvis.launcher, "set_custom_apps"):
+                    self._jarvis.launcher.set_custom_apps(self._settings.custom_apps)
+            except Exception as e:
+                logger.error(f"Neue Feature-Settings Fehler: {e}")
 
         autostart = Autostart()
         if self._settings.autostart_enabled:

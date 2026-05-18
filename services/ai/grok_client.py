@@ -34,7 +34,13 @@ GEDAECHTNIS — automatisch nutzen:
 - update_info(stichwort, neu): Bei Korrekturen ("nein ich heisse...", "stimmt nicht mehr", "eigentlich...").
 - forget_info(): Bei "vergiss das".
 - search_memory("Nutzer"): Bei "was weisst du ueber mich".
-Gespeicherte Infos aktiv nutzen: Namen gelegentlich verwenden, Vorlieben in Empfehlungen einbauen. Dezent, natuerlich.\
+Gespeicherte Infos aktiv nutzen: Namen gelegentlich verwenden, Vorlieben in Empfehlungen einbauen. Dezent, natuerlich.
+
+VISION & TAGESPLANUNG — automatisch nutzen:
+- analyze_camera(question): Kamera-Foto aufnehmen und analysieren — nutze dies wenn Nutzer fragt "was siehst du", "schau mal", "was ist vor mir" oder aehnliches.
+- add_day_task(task, priority, time_hint): Aufgabe zum Tagesplan hinzufuegen.
+- get_day_plan(): Aktuellen Tagesplan abrufen.
+- complete_day_task(task_id_or_name): Aufgabe als erledigt markieren.\
 """
 
 _TOOLS: List[Dict[str, Any]] = [
@@ -378,6 +384,90 @@ _TOOLS: List[Dict[str, Any]] = [
             },
         },
     },
+    # ── Vision & Tagesplanung ─────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_camera",
+            "description": (
+                "Nimmt ein Foto mit der Webcam auf und analysiert dessen Inhalt via Vision-KI. "
+                "Nutze dies wenn der Nutzer fragt 'was siehst du', 'schau mal', "
+                "'was ist vor mir', 'was liegt auf meinem Tisch' oder aehnliches."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Spezifische Frage zum Kamera-Bild, z.B. 'Was siehst du auf dem Tisch?'",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_day_task",
+            "description": (
+                "Fuegt eine Aufgabe zum heutigen Tagesplan hinzu. "
+                "Nutze dies wenn der Nutzer eine Aufgabe oder einen Termin fuer heute erwaehnt."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "Die Aufgabenbeschreibung.",
+                    },
+                    "priority": {
+                        "type": "string",
+                        "description": "Prioritaet: 'high', 'normal' oder 'low'. Standard: 'normal'.",
+                    },
+                    "time_hint": {
+                        "type": "string",
+                        "description": "Optionale Zeitangabe, z.B. '14:00', 'morgens', 'abends'.",
+                    },
+                },
+                "required": ["task"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_day_plan",
+            "description": (
+                "Gibt den aktuellen Tagesplan zurueck. "
+                "Nutze dies wenn der Nutzer nach seinen Aufgaben, seinem Plan oder Terminen fuer heute fragt."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_day_task",
+            "description": (
+                "Markiert eine Aufgabe im Tagesplan als erledigt. "
+                "Nutze dies wenn der Nutzer sagt eine Aufgabe ist fertig oder erledigt."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id_or_name": {
+                        "type": "string",
+                        "description": "Aufgaben-ID (Zahl) oder Namens-Substring der Aufgabe.",
+                    },
+                },
+                "required": ["task_id_or_name"],
+            },
+        },
+    },
 ]
 
 
@@ -416,6 +506,8 @@ class GrokClient:
         self._parallel_tasks: bool = False  # Tools parallel ausführen
         self._context_provider: Optional[Callable] = None  # Langzeit-Kontext Provider
         self._adaptive_max_tokens: Optional[int] = None    # Reaktionszeit: Token-Limit
+        self._personality: str = "assistant"                # Persoenlichkeitsprofil
+        self._personality_custom: str = ""                  # Eigener Persoenlichkeitstext
 
     def set_length_hint(self, hint: str):
         """Setzt den Längenhinweis für zukünftige Antworten."""
@@ -445,6 +537,15 @@ class GrokClient:
         """
         self._context_provider = provider
 
+    def set_personality(self, preset: str, custom_text: str = ""):
+        """
+        Setzt das Persoenlichkeitsprofil fuer den System-Prompt.
+        preset: 'assistant' | 'friend' | 'butler' | 'coach' | 'scientist' | 'custom'
+        custom_text: Eigene Beschreibung wenn preset == 'custom'
+        """
+        self._personality = preset
+        self._personality_custom = custom_text
+
     def set_adaptive_max_tokens(self, max_tokens: Optional[int]):
         """
         Setzt das Token-Limit für die nächste Antwort.
@@ -454,9 +555,27 @@ class GrokClient:
         """
         self._adaptive_max_tokens = max_tokens
 
+    _PERSONALITY_HINTS = {
+        "assistant":  "",
+        "friend":     "Verhalte dich wie ein guter Freund: locker, persoenlich, humorvoll, du-Form. Manchmal Witze oder Anekdoten.",
+        "butler":     "Verhalte dich wie ein hoeflicher englischer Butler: formell, diskret, zuvorkommend, Sie-Form. Elegante Sprache.",
+        "coach":      "Verhalte dich wie ein motivierender Coach: ermutigend, loesung-orientiert, direkt, du-Form. Fokus auf Wachstum.",
+        "scientist":  "Verhalte dich wie ein neugieriger Wissenschaftler: praezise, faktenbasiert, analytisch. Fachbegriffe erklaeren.",
+    }
+
     def _build_system_prompt(self) -> str:
         """Baut den System-Prompt dynamisch — kombiniert Basis, Modus-Hinweise und Memory."""
-        prompt = _SYSTEM_PROMPT
+        # Persoenlichkeit voranstellen
+        personality_hint = ""
+        if self._personality == "custom" and self._personality_custom:
+            personality_hint = f"PERSOENLICHKEIT: {self._personality_custom}"
+        elif self._personality in self._PERSONALITY_HINTS:
+            personality_hint = self._PERSONALITY_HINTS[self._personality]
+
+        if personality_hint:
+            prompt = f"PERSOENLICHKEIT & VERHALTEN: {personality_hint}\n\n{_SYSTEM_PROMPT}"
+        else:
+            prompt = _SYSTEM_PROMPT
 
         if self._length_hint:
             prompt += f"\n\nANTWORTLÄNGE: {self._length_hint}"

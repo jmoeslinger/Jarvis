@@ -46,6 +46,7 @@ _KNOWN_TOOL_NAMES = {
     "remember_info", "forget_info", "update_info", "search_memory",
     "run_terminal", "run_script", "read_file", "write_file",
     "read_clipboard", "analyze_screenshot",
+    "analyze_camera", "add_day_task", "get_day_plan", "complete_day_task",
 }
 
 _TONE_HINTS = {
@@ -152,6 +153,18 @@ class JarvisCore:
         self.search      = WebSearchService()
         self.launcher    = AppLauncher()
 
+        # ── Neue Features ─────────────────────────────────────────────────────
+        from services.ai.day_planner import DayPlanner
+        from services.vision.camera import CameraService
+        from services.vision.vision_client import VisionAnalyzer
+        self.day_planner = DayPlanner()
+        self.camera      = CameraService(camera_index=settings.vision_camera_index)
+        self.vision      = VisionAnalyzer(
+            groq_api_key=settings.grok_api_key,
+            gemini_api_key=settings.gemini_api_key,
+            ollama_model=settings.vision_ollama_model,
+        )
+
         # Gespeicherte Modus-Einstellungen wiederherstellen
         if settings.response_length != "normal":
             self.grok.set_length_hint(_LENGTH_HINTS.get(settings.response_length, ""))
@@ -164,8 +177,22 @@ class JarvisCore:
         if settings.parallel_tasks:
             self.grok.set_parallel_tasks(True)
 
+        # Persoenlichkeit anwenden
+        if settings.personality and settings.personality != "assistant":
+            self.grok.set_personality(settings.personality, settings.personality_custom)
+
         self._register_tools()
         self.hotkey.register(settings.activation_hotkey, self._on_hotkey)
+
+        # Proaktiver Engine (Hintergrund-Daemon)
+        from services.ai.proactive_engine import ProactiveEngine
+        self._proactive_engine = ProactiveEngine(
+            on_suggestion=lambda text: self.send_text_command(text),
+            is_idle=lambda: self.state.name == "WAKE_LISTENING",
+            get_open_tasks=self.day_planner.get_open_count,
+        )
+        if settings.proactive_suggestions:
+            self._proactive_engine.start()
 
         # Gespeicherte wiederholende Tasks wiederherstellen
         self._restore_recurring_tasks()
@@ -1524,6 +1551,11 @@ class JarvisCore:
         self.grok.register_tool("write_file",          self._tool_write_file)
         self.grok.register_tool("read_clipboard",      self._tool_clipboard)
         self.grok.register_tool("analyze_screenshot",  self._tool_screenshot)
+        # Vision & Tagesplanung
+        self.grok.register_tool("analyze_camera",      self._tool_analyze_camera)
+        self.grok.register_tool("add_day_task",         self._tool_add_day_task)
+        self.grok.register_tool("get_day_plan",         self._tool_get_day_plan)
+        self.grok.register_tool("complete_day_task",    self._tool_complete_day_task)
 
     def _tool_search(self, query: str) -> str:
         self._notify("system", f"Suche: {query}")
@@ -1652,3 +1684,99 @@ class JarvisCore:
         result = analyze_screenshot(question)
         logger.info(f"Screenshot analysiert: {len(result)} Zeichen")
         return result
+
+    # ── Vision & Tagesplanung ─────────────────────────────────────────────────
+
+    def _tool_analyze_camera(self, question: str = "") -> str:
+        """Nimmt ein Kamera-Foto auf und analysiert es mit Vision-KI."""
+        if not self.settings.vision_enabled:
+            return "Vision-Feature ist deaktiviert. Bitte in den Einstellungen aktivieren."
+        self._notify("system", "📷 Kamera-Aufnahme...")
+        b64 = self.camera.capture_base64()
+        if not b64:
+            return "Kamera-Aufnahme fehlgeschlagen. Bitte Kamera pruefen."
+        if not question:
+            question = "Was siehst du auf diesem Bild? Beschreibe den Inhalt praezise auf Deutsch."
+        self._notify("system", "🔍 Bild wird analysiert...")
+        result = self.vision.analyze(b64, question)
+        logger.info(f"Kamera analysiert: {len(result)} Zeichen")
+        return result
+
+    def _tool_add_day_task(self, task: str, priority: str = "normal", time_hint: str = "") -> str:
+        """Fuegt eine Aufgabe zum Tagesplan hinzu."""
+        result = self.day_planner.add_task(task, priority, time_hint)
+        self._notify("system", f"📋 {result}")
+        return result
+
+    def _tool_get_day_plan(self) -> str:
+        """Gibt den aktuellen Tagesplan zurueck."""
+        return self.day_planner.get_plan()
+
+    def _tool_complete_day_task(self, task_id_or_name: str) -> str:
+        """Markiert eine Aufgabe als erledigt."""
+        result = self.day_planner.complete_task(task_id_or_name)
+        self._notify("system", f"✅ {result}")
+        return result
+
+    # ── Neue Feature-Setter ───────────────────────────────────────────────────
+
+    def set_personality(self, preset: str, custom_text: str = ""):
+        """
+        Setzt das Persoenlichkeitsprofil.
+        preset: 'assistant' | 'friend' | 'butler' | 'coach' | 'scientist' | 'custom'
+        """
+        self.grok.set_personality(preset, custom_text)
+        self.settings.personality = preset
+        self.settings.personality_custom = custom_text
+        self.settings.save()
+        labels = {
+            "assistant": "Assistent",
+            "friend":    "Freund",
+            "butler":    "Butler",
+            "coach":     "Coach",
+            "scientist": "Wissenschaftler",
+            "custom":    "Eigene",
+        }
+        self._notify("system", f"🎭 Persoenlichkeit: {labels.get(preset, preset)}")
+
+    def set_mood_based_responses(self, enabled: bool):
+        """Schaltet mood-basierte Antworten ein/aus."""
+        self.settings.mood_based_responses = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        self._notify("system", f"😊 Mood-Antworten: {'AN' if enabled else 'AUS'}")
+
+    def set_proactive_suggestions(self, enabled: bool):
+        """Schaltet den proaktiven Vorschlags-Engine ein/aus."""
+        self.settings.proactive_suggestions = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        if enabled:
+            self._proactive_engine.start()
+            self._notify("system", "💡 Proaktive Vorschlaege AN")
+        else:
+            self._proactive_engine.stop()
+            self._notify("system", "💡 Proaktive Vorschlaege AUS")
+
+    def set_day_planning(self, enabled: bool):
+        """Schaltet Tagesplanung ein/aus."""
+        self.settings.day_planning = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        if enabled:
+            count = self.day_planner.get_open_count()
+            self._notify("system", f"📋 Tagesplanung AN ({count} offene Aufgaben)")
+        else:
+            self._notify("system", "📋 Tagesplanung AUS")
+
+    def set_vision_enabled(self, enabled: bool):
+        """Schaltet das Vision/Kamera-Feature ein/aus."""
+        self.settings.vision_enabled = enabled
+        self.settings.save()
+        self._fire_settings_changed()
+        if enabled:
+            available = self.camera.is_available()
+            status = "Kamera verfuegbar" if available else "Keine Kamera gefunden"
+            self._notify("system", f"📷 Vision AN — {status}")
+        else:
+            self._notify("system", "📷 Vision AUS")

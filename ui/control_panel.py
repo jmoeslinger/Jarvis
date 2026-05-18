@@ -79,6 +79,10 @@ class ControlPanel:
         # Hörmodus-Buttons
         self._hoehmodus_btns: Dict[str, ctk.CTkButton] = {}
 
+        # Persoenlichkeit & Vision Buttons
+        self._personality_btns: dict = {}
+        self._vision_btns: dict = {}
+
         self._jarvis.on_state_change(self._on_state)
         self._jarvis.on_message(self._on_message)
         self._jarvis.on_task_update(self._on_task_update)
@@ -441,6 +445,70 @@ class ControlPanel:
             )
             btn.pack(fill="x", pady=2)
             self._hoehmodus_btns[key] = btn
+
+        # ── PERSOENLICHKEIT & VISION ──────────────────────────────────────────────
+        self._section(body, "PERSOENLICHKEIT & VISION")
+
+        _PERSONALITY_MODES = [
+            ("🤖 Assistent",     "assistant"),
+            ("👫 Freund",         "friend"),
+            ("🎩 Butler",         "butler"),
+            ("💪 Coach",          "coach"),
+            ("🔬 Wissenschaftler","scientist"),
+        ]
+        cur_pers = getattr(self._jarvis.settings, "personality", "assistant")
+        self._personality_btns: dict = {}
+
+        # Zeile 1: Assistent | Freund | Butler
+        pers_row1 = ctk.CTkFrame(body, fg_color="transparent")
+        pers_row1.pack(fill="x", pady=(0, 2))
+        pers_row1.columnconfigure((0, 1, 2), weight=1, uniform="pers1")
+        for col, (lbl, val) in enumerate(_PERSONALITY_MODES[:3]):
+            btn = ctk.CTkButton(
+                pers_row1, text=lbl,
+                fg_color="#0f4c4c" if cur_pers == val else "#334155",
+                hover_color="#0f4c4c", text_color="#e2e8f0",
+                font=ctk.CTkFont(size=11), height=28, corner_radius=6,
+                command=lambda v=val: self._set_personality(v),
+            )
+            btn.grid(row=0, column=col, padx=2, sticky="ew")
+            self._personality_btns[val] = btn
+
+        # Zeile 2: Coach | Wissenschaftler
+        pers_row2 = ctk.CTkFrame(body, fg_color="transparent")
+        pers_row2.pack(fill="x", pady=(0, 4))
+        pers_row2.columnconfigure((0, 1), weight=1, uniform="pers2")
+        for col, (lbl, val) in enumerate(_PERSONALITY_MODES[3:]):
+            btn = ctk.CTkButton(
+                pers_row2, text=lbl,
+                fg_color="#0f4c4c" if cur_pers == val else "#334155",
+                hover_color="#0f4c4c", text_color="#e2e8f0",
+                font=ctk.CTkFont(size=11), height=28, corner_radius=6,
+                command=lambda v=val: self._set_personality(v),
+            )
+            btn.grid(row=0, column=col, padx=2, sticky="ew")
+            self._personality_btns[val] = btn
+
+        _VISION_MODES = [
+            ("📷   Vision / Kamera",         "vision_enabled"),
+            ("💡   Proaktive Vorschlaege",    "proactive_suggestions"),
+            ("📋   Tagesplanung",             "day_planning"),
+            ("😊   Mood-Antworten",           "mood_based_responses"),
+        ]
+        self._vision_btns: dict = {}
+        for lbl, key in _VISION_MODES:
+            active = getattr(self._jarvis.settings, key, False)
+            btn = ctk.CTkButton(
+                body, text=lbl,
+                fg_color="#134e4a" if active else "#1e293b",
+                hover_color="#134e4a",
+                text_color="#e2e8f0",
+                font=ctk.CTkFont(family="Segoe UI", size=13),
+                height=40, corner_radius=8, anchor="w",
+                command=lambda k=key: self._toggle_vision(k),
+            )
+            btn.pack(fill="x", pady=2)
+            self._vision_btns[key] = btn
 
         # ── KONFIDENZ ─────────────────────────────────────────────────────────────
         self._section(body, "KONFIDENZ")
@@ -1058,12 +1126,56 @@ class ControlPanel:
             active = getattr(s, key, False)
             btn.configure(fg_color="#4c1d95" if active else "#1e293b")
 
+    # ── Persoenlichkeit & Vision ──────────────────────────────────────────────
+
+    def _set_personality(self, preset: str):
+        """Setzt das Persoenlichkeitsprofil."""
+        threading.Thread(
+            target=self._jarvis.set_personality, args=(preset,), daemon=True
+        ).start()
+        for val, btn in self._personality_btns.items():
+            btn.configure(fg_color="#0f4c4c" if val == preset else "#334155")
+
+    def _toggle_vision(self, key: str):
+        """Schaltet einen Vision/Feature-Toggle um."""
+        s = self._jarvis.settings
+        new_val = not getattr(s, key, False)
+
+        # Optimistic UI-Update
+        if key in self._vision_btns:
+            self._vision_btns[key].configure(
+                fg_color="#134e4a" if new_val else "#1e293b"
+            )
+
+        dispatch = {
+            "vision_enabled":        self._jarvis.set_vision_enabled,
+            "proactive_suggestions": self._jarvis.set_proactive_suggestions,
+            "day_planning":          self._jarvis.set_day_planning,
+            "mood_based_responses":  self._jarvis.set_mood_based_responses,
+        }
+        fn = dispatch.get(key)
+        if fn:
+            threading.Thread(target=fn, args=(new_val,), daemon=True).start()
+
+    def _refresh_vision_buttons(self):
+        """Aktualisiert die Vision/Feature-Buttons anhand der Settings."""
+        if not (self._win and self._win.winfo_exists()):
+            return
+        s = self._jarvis.settings
+        cur_pers = getattr(s, "personality", "assistant")
+        for val, btn in self._personality_btns.items():
+            btn.configure(fg_color="#0f4c4c" if val == cur_pers else "#334155")
+        for key, btn in self._vision_btns.items():
+            active = getattr(s, key, False)
+            btn.configure(fg_color="#134e4a" if active else "#1e293b")
+
     def _on_settings_changed(self):
         """Callback: Settings wurden geändert — alle betroffenen Buttons aktualisieren."""
         if self._hud_root:
             self._hud_root.after(0, self._refresh_hoehmodus_buttons)
             self._hud_root.after(0, self._refresh_analyse_buttons)
             self._hud_root.after(0, self._refresh_adaption_buttons)
+            self._hud_root.after(0, self._refresh_vision_buttons)
 
     def _refresh_hoehmodus_buttons(self):
         """Aktualisiert die Hörmodus-Button-Farben anhand der aktuellen Settings."""
