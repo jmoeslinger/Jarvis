@@ -161,12 +161,23 @@ class MemoryStore:
             return f"Wiederherstellung fehlgeschlagen: {e}"
 
     def _maybe_reload(self):
-        """Lädt die Datei neu, wenn sie von einem anderen Prozess verändert wurde."""
+        """Lädt die Datei neu, wenn sie von einem anderen Prozess verändert wurde.
+        BUG-093: Disk-I/O darf NICHT unter self._lock laufen (BUG-068/088-Muster).
+        Double-Checked Locking: stat() + _load() ausserhalb, dann unter Lock eintragen.
+        Darf NICHT unter self._lock aufgerufen werden — Callers muessen es vorher rufen.
+        """
         try:
-            if self._file.exists():
-                mtime = self._file.stat().st_mtime
-                if mtime > self._last_mtime:
-                    self._entries   = self._load()
+            if not self._file.exists():
+                return
+            mtime = self._file.stat().st_mtime   # stat() ausserhalb des Locks
+            with self._lock:
+                if mtime <= self._last_mtime:
+                    return   # keine Aenderung — schneller Pfad
+            # Disk-I/O ausserhalb des Locks
+            new_entries = self._load()
+            with self._lock:
+                if mtime > self._last_mtime:   # Double-Check nach erneutem Lock
+                    self._entries    = new_entries
                     self._last_mtime = mtime
         except Exception:
             pass
@@ -243,8 +254,8 @@ class MemoryStore:
 
     def remember(self, info: str, category: str = "") -> str:
         """Speichert eine neue Information. Erkennt Duplikate und Kategorie automatisch."""
+        self._maybe_reload()   # BUG-093: ausserhalb des Locks aufrufen
         with self._lock:
-            self._maybe_reload()
             info = info.strip()
             if not info:
                 return "Keine Information angegeben."
@@ -267,11 +278,12 @@ class MemoryStore:
         """Überschreibt einen vorhandenen Eintrag (Korrektur).
         BUG-023: _maybe_reload() vor der Suche — verhindert TOCTOU wenn Datei
         extern geändert wurde, bevor update() die Suche startet.
+        BUG-093: _maybe_reload() ausserhalb des Locks aufrufen.
         """
+        self._maybe_reload()   # BUG-023/BUG-093: ausserhalb des Locks
         need_save  = False
         result_msg = None
         with self._lock:
-            self._maybe_reload()   # BUG-023: reload under lock, not just in remember()
             entry = self._find_similar(search_term, cutoff=0.55)
             if entry:
                 old_content = entry.content
@@ -291,6 +303,7 @@ class MemoryStore:
 
     def forget(self, search_term: str) -> str:
         """Löscht einen Eintrag (fuzzy)."""
+        self._maybe_reload()   # BUG-095: fehlte — inkonsistent mit remember()/update()
         found_content = None
         with self._lock:
             entry = self._find_similar(search_term, cutoff=0.55)
@@ -382,8 +395,8 @@ class MemoryStore:
         Bei < 15 Einträgen: alle.
         Bei >= 15: nur die 15 relevantesten (keyword-scored + Priorität).
         """
+        self._maybe_reload()   # BUG-093: ausserhalb des Locks aufrufen
         with self._lock:
-            self._maybe_reload()
             if not self._entries:
                 return ""
 

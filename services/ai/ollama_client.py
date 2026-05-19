@@ -68,9 +68,31 @@ class OllamaClient(GrokClient):
         self._adaptive_responses = False
         logger.info(f"Ollama-Client initialisiert: {base_url} / {model}")
 
+    # Persoenlichkeits-Hinweise identisch zu GrokClient
+    _PERSONALITY_HINTS = {
+        "assistant":  "",
+        "friend":     "Verhalte dich wie ein guter Freund: locker, persoenlich, humorvoll, du-Form. Manchmal Witze oder Anekdoten.",
+        "butler":     "Verhalte dich wie ein hoeflicher englischer Butler: formell, diskret, zuvorkommend, Sie-Form. Elegante Sprache.",
+        "coach":      "Verhalte dich wie ein motivierender Coach: ermutigend, loesung-orientiert, direkt, du-Form. Fokus auf Wachstum.",
+        "scientist":  "Verhalte dich wie ein neugieriger Wissenschaftler: praezise, faktenbasiert, analytisch. Fachbegriffe erklaeren.",
+    }
+
     def _build_system_prompt(self) -> str:
-        """Baut den System-Prompt mit allen aktiven Modus-Hinweisen."""
-        prompt = _LOCAL_SYSTEM_PROMPT
+        """Baut den System-Prompt mit allen aktiven Modus-Hinweisen.
+        BUG-092: _context_provider fehlte — Langzeit-Kontext nie in Ollama-Prompt eingebettet.
+        BUG-096: _personality fehlte — Persoenlichkeitsprofil hatte keinen Effekt auf Ollama.
+        """
+        # BUG-096: Persoenlichkeit voranstellen (identisch zu GrokClient)
+        personality_hint = ""
+        if self._personality == "custom" and self._personality_custom:
+            personality_hint = f"PERSOENLICHKEIT: {self._personality_custom}"
+        elif self._personality in self._PERSONALITY_HINTS:
+            personality_hint = self._PERSONALITY_HINTS[self._personality]
+
+        if personality_hint:
+            prompt = f"PERSOENLICHKEIT & VERHALTEN: {personality_hint}\n\n{_LOCAL_SYSTEM_PROMPT}"
+        else:
+            prompt = _LOCAL_SYSTEM_PROMPT
         if self._length_hint:
             prompt += f"\n\nANTWORTLÄNGE: {self._length_hint}"
         if self._tone_hint:
@@ -94,6 +116,14 @@ class OllamaClient(GrokClient):
             mem = self._get_memories(self._current_query)
             if mem:
                 prompt += mem
+        # BUG-092: Langzeit-Kontext einbetten (identisch zu GrokClient)
+        if self._context_provider:
+            try:
+                ctx = self._context_provider()
+                if ctx:
+                    prompt += ctx
+            except Exception:
+                pass
         return prompt
 
     # ── Verfügbarkeits-Check ───────────────────────────────────────────────────
