@@ -817,8 +817,12 @@ class CameraWindow:
 
             time.sleep(1 / 30)
 
-        cap.release()
-        self._cap = None
+        # BUG-087: _stop_preview() already set self._cap = None and called
+        # cap.release() while the loop was running.  Only release here if
+        # _stop_preview() has NOT been called (self._cap still points at cap).
+        if self._cap is not None:
+            self._cap = None
+            cap.release()
 
     @staticmethod
     def _open_cap(cv2, index: int):

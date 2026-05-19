@@ -969,14 +969,17 @@ class GrokClient:
         fake_calls = []
 
         tool_results_recovery = []
-        for name, args_str in matches:
+        for _i, (name, args_str) in enumerate(matches):
             try:
                 raw_args = json.loads(args_str)
                 args = raw_args if isinstance(raw_args, dict) else {}
             except json.JSONDecodeError:
                 args = {}
 
-            call_id = f"recover_{name}"
+            # BUG-084: f"recover_{name}" war nicht eindeutig wenn dasselbe Tool
+            # mehrmals aufgerufen wurde (z.B. zwei search_internet-Calls) —
+            # doppelte tool_call_ids fuehren zu 400-Fehlern bei der API.
+            call_id = f"recover_{name}_{_i}"
             fake_calls.append({"id": call_id, "type": "function",
                                 "function": {"name": name, "arguments": json.dumps(args)}})
 

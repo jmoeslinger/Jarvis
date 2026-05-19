@@ -159,22 +159,26 @@ class Settings:
         """Atomisches, thread-sicheres Speichern der Settings.
         BUG-070: Snapshot unter Lock, dann Temp-Datei + replace() ausserhalb —
         verhindert Datei-Korruption bei Absturz und gleichzeitige Schreibzugriffe.
+        BUG-089: _save_lock muss auch die tmp-write+replace-Phase abdecken.
+        Ohne das koennen zwei gleichzeitige save()-Aufrufe beide in dieselbe
+        .tmp-Datei schreiben und sie korrumpieren (gleicher Fehler wie BUG-080
+        in MemoryStore, der dort durch einen separaten _save_lock behoben wurde).
         """
         with self._save_lock:
             data = asdict(self)
-        tmp = CONFIG_FILE.with_suffix(".tmp")
-        try:
-            tmp.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            tmp.replace(CONFIG_FILE)
-        except Exception as exc:
-            _logger.warning(f"Settings speichern fehlgeschlagen: {exc}")
+            tmp = CONFIG_FILE.with_suffix(".tmp")
             try:
-                tmp.unlink(missing_ok=True)
-            except Exception:
-                pass
+                tmp.write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                tmp.replace(CONFIG_FILE)
+            except Exception as exc:
+                _logger.warning(f"Settings speichern fehlgeschlagen: {exc}")
+                try:
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     def reload(self):
         self._load()

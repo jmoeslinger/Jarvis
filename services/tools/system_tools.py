@@ -293,9 +293,19 @@ def write_file(
 
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        mode = "a" if append else "w"
-        with open(file_path, mode, encoding=encoding) as fh:
-            fh.write(content)
+        if append:
+            # Append-Modus: direkt schreiben (kein atomisches Ersetzen möglich)
+            with open(file_path, "a", encoding=encoding) as fh:
+                fh.write(content)
+        else:
+            # BUG-091: direktes open("w") lässt die Zieldatei bei Absturz oder
+            # Disk-Full mitten im Schreiben halbfertig/korrumpiert zurück.
+            # Fix: atomisches Schreiben via tmp-Datei + replace() — konsistent
+            # mit allen anderen Datei-Schreibvorgängen im Projekt.
+            tmp = file_path.with_suffix(file_path.suffix + ".tmp")
+            with open(tmp, "w", encoding=encoding) as fh:
+                fh.write(content)
+            tmp.replace(file_path)
         action = "angehängt" if append else "geschrieben"
         logger.info(f"Datei {action}: {path!r} ({len(content)} Zeichen)")
         return f"Datei '{path}' erfolgreich {action} ({len(content)} Zeichen)."

@@ -144,7 +144,11 @@ class DayPlanner:
         """Gibt den aktuellen Tagesplan als lesbaren String zurueck."""
         with self._lock:
             did_reset = self._check_day_reset()
-            tasks = [t for t in self._tasks if not t["done"]] if filter_done else self._tasks
+            # BUG-083: self._tasks direkt zuweisen erzeugt eine Referenz — Iteration
+            # ausserhalb des Locks ist dann nicht thread-sicher (z.B. wenn parallel_tasks
+            # gleichzeitig add_task() aufruft und die Liste modifiziert wird).
+            # list() erzeugt immer eine flache Kopie, egal ob filter_done gesetzt ist.
+            tasks = [t for t in self._tasks if not t["done"]] if filter_done else list(self._tasks)
         # BUG-061: Nach Tageswechsel-Reset ausserhalb des Locks speichern
         if did_reset:
             self._save()

@@ -281,15 +281,26 @@ class SpeechSynthesizer:
     # ------------------------------------------------------------------
 
     def _get_fallback(self) -> pyttsx3.Engine:
-        # BUG-032: Initialisierung des Fallback-Engines unter Lock schuetzen
+        # BUG-032: Initialisierung des Fallback-Engines unter Lock schuetzen.
+        # BUG-090: pyttsx3.init() kann mehrere Sekunden dauern (COM-Init auf Windows).
+        # Das darf nicht unter self._lock passieren, weil stop() denselben Lock haelt —
+        # ein Escape-Tastendruck wuerde dann bis zum Ende der pyttsx3-Initialisierung
+        # blockieren (BUG-060-Muster: kein schweres Init unter Lock).
+        # Fix: erst pruefen (unter Lock), dann ausserhalb initialisieren, dann
+        # erneut unter Lock eintragen (Double-Checked Locking).
         with self._lock:
-            if self._fallback is None:
-                self._fallback = pyttsx3.init()
-                self._fallback.setProperty("rate", 175)
-                for v in self._fallback.getProperty("voices"):
-                    if "german" in v.name.lower() or "de_" in v.id.lower():
-                        self._fallback.setProperty("voice", v.id)
-                        break
+            if self._fallback is not None:
+                return self._fallback
+        # Initialisierung ausserhalb des Locks — stop() bleibt reaktionsfaehig
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 175)
+        for v in engine.getProperty("voices"):
+            if "german" in v.name.lower() or "de_" in v.id.lower():
+                engine.setProperty("voice", v.id)
+                break
+        with self._lock:
+            if self._fallback is None:   # erneut pruefen (Race mit parallelem Init)
+                self._fallback = engine
             return self._fallback
 
     def _speak_fallback(self, text: str):

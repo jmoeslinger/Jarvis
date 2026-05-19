@@ -59,6 +59,13 @@ def main():
     if not _check_single_instance():
         sys.exit(0)
 
+    # BUG-085: PID-Datei wurde nur im finally-Block von hud.run() geloescht.
+    # Wirft JarvisCore(), TrayIcon() oder HUD() eine andere Exception als OSError,
+    # wird der finally-Block nie erreicht und die PID-Datei bleibt — der naechste
+    # Start wird dann blockiert. atexit garantiert Aufraeumen egal wie main() endet.
+    import atexit
+    atexit.register(_remove_pid_file)
+
     logger.info("=" * 60)
     logger.info("  Jarvis wird gestartet")
     logger.info("=" * 60)

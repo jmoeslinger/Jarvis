@@ -147,10 +147,14 @@ class MemoryStore:
             if not _BACKUP_FILE.exists():
                 return "Kein Backup vorhanden."
             shutil.copy2(_BACKUP_FILE, self._file)
+            # BUG-088: _load() does file I/O — must NOT be called while holding
+            # self._lock (same BUG-068 pattern as _save()).  Load outside, then
+            # swap the result in under the lock.
+            new_entries = self._load()
             with self._lock:
-                self._entries    = self._load()
-                self._last_mtime = self._file.stat().st_mtime
-            count = len(self._entries)
+                self._entries    = new_entries
+                self._last_mtime = self._file.stat().st_mtime if self._file.exists() else 0.0
+            count = len(new_entries)
             logger.info(f"Memory wiederhergestellt: {count} Einträge")
             return f"Backup wiederhergestellt: {count} Einträge."
         except Exception as e:

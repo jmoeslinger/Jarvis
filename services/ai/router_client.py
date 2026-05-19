@@ -85,7 +85,19 @@ class RouterClient:
 
     @_model.setter
     def _model(self, value: str):
-        self._providers[self._active_idx][1]._model = value
+        # BUG-086: Den nur aktiven Provider zu aktualisieren ist falsch wenn
+        # local-Modus aktiv ist: der Groq/Grok-Modellname wird dann auf den
+        # Ollama-Client geschrieben, der diesen Namen nicht kennt.
+        # Fix: ausschliesslich Online-Provider (nicht Ollama/Lokal) aktualisieren,
+        # da _model immer den Online-Modellnamen aus den Einstellungen traegt.
+        updated = False
+        for name, client in self._providers:
+            if not ("ollama" in name.lower() or "lokal" in name.lower()):
+                client._model = value
+                updated = True
+        if not updated:
+            # Fallback: nur lokale Provider konfiguriert → aktiven nehmen
+            self._providers[self._active_idx][1]._model = value
 
     @property
     def history(self) -> List[Dict[str, Any]]:
