@@ -1267,10 +1267,54 @@ class ControlPanel:
     def _do_settings_refresh(self):
         """Fuehrt alle Button-Refreshes in einem einzigen Mainloop-Tick durch."""
         self._settings_refresh_id = None
+        # BUG-097: Mode/Laenge/Ton/Toggle-Buttons fehlten — sie wurden nie aktualisiert
+        # wenn Einstellungen extern (z.B. aus SettingsWindow) geaendert wurden.
+        self._refresh_mode_buttons()
+        self._refresh_length_buttons()
+        self._refresh_tone_buttons()
+        self._refresh_toggle_buttons()
         self._refresh_hoehmodus_buttons()
         self._refresh_analyse_buttons()
         self._refresh_adaption_buttons()
         self._refresh_vision_buttons()
+
+    def _refresh_mode_buttons(self):
+        """Aktualisiert die KI-Provider-Modus-Buttons anhand der aktuellen Einstellung."""
+        if not (self._win and self._win.winfo_exists()):
+            return
+        current = getattr(self._jarvis.grok, "_mode", "auto")
+        for val, btn in self._mode_btns.items():
+            btn.configure(fg_color="#2563eb" if val == current else "#334155")
+
+    def _refresh_length_buttons(self):
+        """Aktualisiert die Antwortlaenge-Buttons anhand der Settings."""
+        if not (self._win and self._win.winfo_exists()):
+            return
+        cur = getattr(self._jarvis.settings, "response_length", "normal")
+        for val, btn in self._len_btns.items():
+            btn.configure(fg_color="#0f766e" if val == cur else "#334155")
+
+    def _refresh_tone_buttons(self):
+        """Aktualisiert die Ton/Stil-Buttons anhand der Settings."""
+        if not (self._win and self._win.winfo_exists()):
+            return
+        cur = getattr(self._jarvis.settings, "response_tone", "normal")
+        for val, btn in self._tone_btns.items():
+            btn.configure(fg_color="#7c3aed" if val == cur else "#334155")
+
+    def _refresh_toggle_buttons(self):
+        """Aktualisiert die KI-Modus-Toggles (Multi-Step / Planung / Parallel)."""
+        if not (self._win and self._win.winfo_exists()):
+            return
+        s = self._jarvis.settings
+        state_map = {
+            "multi_step":     "multi_step_reasoning",
+            "task_planning":  "task_planning",
+            "parallel_tasks": "parallel_tasks",
+        }
+        for key, btn in self._toggle_btns.items():
+            active = getattr(s, state_map.get(key, key), False)
+            btn.configure(fg_color="#d97706" if active else "#334155")
 
     def _refresh_hoehmodus_buttons(self):
         """Aktualisiert die Hörmodus-Button-Farben anhand der aktuellen Settings."""

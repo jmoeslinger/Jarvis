@@ -1640,16 +1640,15 @@ class JarvisCore:
             except Exception as e:
                 logger.error(f"Timer-Ring TTS-Fehler: {e}")
 
-        # Alte abgeschlossene Timer aufräumen
-        # BUG-043: _active_timers unter Lock bereinigen und erweitern
-        with self._timers_lock:
-            self._active_timers = [t for t in self._active_timers if t.is_alive()]
-
+        # BUG-094: Bereinigen, Timer erstellen und in _active_timers eintragen
+        # alles unter einem einzigen Lock-Acquire. Zwei getrennte Acquisitions
+        # erzeugten ein Race-Window: stop() konnte zwischen den beiden Locks laufen
+        # und den Timer canceln bevor er in _active_timers eingetragen war.
         t = threading.Timer(float(seconds), _ring)
         t.daemon = True
         t.start()
-
         with self._timers_lock:
+            self._active_timers = [x for x in self._active_timers if x.is_alive()]
             self._active_timers.append(t)
         logger.info(f"Timer gestartet: '{label}' in {seconds}s")
 
