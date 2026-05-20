@@ -504,8 +504,11 @@ class SettingsWindow:
         threading.Thread(target=self._capture_hotkey, daemon=True).start()
 
     def _capture_hotkey(self):
+        # BUG-098: keyboard.read_hotkey(suppress=True) blockiert alle Tastatureingaben
+        # systemweit solange es wartet. suppress=False vermeidet dieses Problem —
+        # der Benutzer kann weiterhin tippen und andere Anwendungen nutzen.
         try:
-            combo = keyboard.read_hotkey(suppress=True)
+            combo = keyboard.read_hotkey(suppress=False)
             if combo.lower() in ("escape", "esc"):
                 self._root.after(0, self._reset_record_btn)
                 return

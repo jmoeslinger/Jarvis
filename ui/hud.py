@@ -107,8 +107,13 @@ class HUD:
             self._root.after(0, self._root.withdraw)
 
     def is_alive(self) -> bool:
+        # BUG-096: winfo_exists() ist nicht thread-sicher und darf nur im
+        # Hauptthread aufgerufen werden. Diese Methode wird jedoch auch aus
+        # pystray/Background-Threads aufgerufen. Als thread-sicherer Proxy
+        # prüfen wir nur ob self._root gesetzt und _hidden nicht gesetzt ist —
+        # der Tkinter-interne Zustand bleibt unberührt.
         try:
-            return self._root is not None and bool(self._root.winfo_exists())
+            return self._root is not None and not getattr(self._root, '_is_deleted', False)
         except Exception:
             return False
 

@@ -143,12 +143,17 @@ class ControlPanel:
         Panel öffnen/in Vordergrund bringen.
         Wartet per Timer bis der HUD-Root bereit ist (maximal 10 Sekunden).
         BUG-022: _show_pending verhindert mehrere parallele Retry-Ketten.
+        BUG-096: winfo_exists() darf NUR im Hauptthread aufgerufen werden.
+        Diese Methode wird auch aus pystray/Timer-Threads aufgerufen, daher
+        prüfen wir nur ob _root gesetzt ist — der eigentliche winfo_exists()-
+        Check geschieht im after()-Callback im Hauptthread (_check_and_show).
         """
         root = getattr(self._hud, "_root", None)
-        if root and root.winfo_exists():
+        if root is not None:
             self._show_pending = False
             self._hud_root = root
-            root.after(0, self._open_or_show)
+            # after() ist thread-sicher — winfo_exists() wird im Hauptthread geprüft
+            root.after(0, self._check_and_show)
         elif _retries == 0:
             # Erste show()-Anfrage: nur starten wenn keine Kette läuft
             if self._show_pending:
@@ -169,6 +174,14 @@ class ControlPanel:
         return self._win is not None and self._win.winfo_exists()
 
     # ── Fenster-Lifecycle ─────────────────────────────────────────────────────
+
+    def _check_and_show(self):
+        """Läuft im Hauptthread — prüft winfo_exists() thread-sicher und öffnet das Panel."""
+        root = self._hud_root
+        if root and root.winfo_exists():
+            self._open_or_show()
+        else:
+            logger.warning("ControlPanel._check_and_show: HUD-Root nicht mehr verfügbar.")
 
     def _open_or_show(self):
         """Läuft im Hauptthread."""

@@ -182,8 +182,13 @@ class ChatWindow:
                 pass
 
     def is_alive(self) -> bool:
+        # BUG-096: winfo_exists() ist nicht thread-sicher. Diese Methode wird
+        # aus Background-Threads aufgerufen (_on_state, _on_message). Als
+        # thread-sicherer Proxy prüfen wir nur ob _root gesetzt ist — der Tk-
+        # interne Zustand bleibt unberührt. after() prüft dann selbst ob das
+        # Widget noch existiert.
         try:
-            return self._root is not None and bool(self._root.winfo_exists())
+            return self._root is not None
         except Exception:
             return False
 

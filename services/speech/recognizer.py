@@ -128,11 +128,21 @@ class SpeechRecognizer:
         """Kalibriert die Erkennungsschwelle anhand des aktuellen Umgebungsgeräuschpegels.
         Adaptive Marge: bei hohem Ambient-Pegel kleinere Marge, damit Stimme noch erkannt wird.
         Absolute Obergrenze: 63 dB — verhindert dass Musik/Hintergrund die Erkennung blockiert.
+        BUG-097: Wenn das konfigurierte Gerät 0 dB liefert (falsches/stummes Gerät),
+        werden automatisch alle verfügbaren Eingabegeräte als Fallback versucht.
         """
         logger.info("Kalibriere Mikrofon...")
         devices_to_try = [self._device]
         if self._device is not None:
             devices_to_try.append(None)
+        # Fallback-Pool: alle verfügbaren Eingabegeräte (wird nur genutzt wenn Standard 0dB liefert)
+        _all_input_devices: list = []
+        try:
+            for i, dev in enumerate(sd.query_devices()):
+                if dev.get("max_input_channels", 0) > 0:
+                    _all_input_devices.append(i)
+        except Exception:
+            pass
 
         for device in devices_to_try:
             try:
@@ -170,6 +180,45 @@ class SpeechRecognizer:
                         f"Mikrofon liefert kaum Signal ({ambient:.1f} dB) — "
                         f"falsches Gerät oder Mikrofon stumm geschaltet?"
                     )
+                    # BUG-097: 0 dB deutet auf falsches Default-Gerät hin.
+                    # Alle anderen Eingabegeräte als Fallback durchprobieren.
+                    for fallback_dev in _all_input_devices:
+                        if fallback_dev == device:
+                            continue
+                        try:
+                            fb_samples = sd.rec(
+                                int(duration * _SAMPLERATE),
+                                samplerate=_SAMPLERATE,
+                                channels=_CHANNELS,
+                                dtype=_DTYPE,
+                                device=fallback_dev,
+                            )
+                            sd.wait()
+                            fb_ambient = _rms_db(fb_samples)
+                            if fb_ambient >= 10:
+                                logger.info(
+                                    f"Besseres Mikrofon gefunden: Gerät {fallback_dev} "
+                                    f"({fb_ambient:.1f} dB) — wechsle automatisch."
+                                )
+                                self._device = fallback_dev
+                                self._noise_samples = fb_samples.reshape(-1).copy()
+                                ambient = fb_ambient
+                                if ambient < 30:
+                                    margin = 18
+                                elif ambient < 40:
+                                    margin = 14
+                                elif ambient < 50:
+                                    margin = 10
+                                else:
+                                    margin = 6
+                                self._threshold = min(ambient + margin, 63.0)
+                                logger.info(
+                                    f"Mikrofon bereit (Auto-Gerät {fallback_dev}) — "
+                                    f"Umgebung: {ambient:.1f} dB, Schwelle: {self._threshold:.1f} dB"
+                                )
+                                return
+                        except Exception as _fb_err:
+                            logger.debug(f"Fallback-Gerät {fallback_dev}: {_fb_err}")
                 if ambient > 50:
                     logger.warning(
                         f"Hoher Umgebungspegel ({ambient:.1f} dB) — "
