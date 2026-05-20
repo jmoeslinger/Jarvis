@@ -74,6 +74,11 @@ class StyleLearner:
 
     def __init__(self):
         self._lock = threading.Lock()
+        # BUG-C: Separates Lock für Disk-I/O — verhindert gleichzeitige _save()-
+        # Aufrufe (record_interrupt() + learn_command() alle 5 Commands, oder
+        # reset() gleichzeitig mit einem laufenden learn_command()), die beide in
+        # dieselbe .tmp-Datei schreiben und sich gegenseitig korrumpieren würden.
+        self._save_lock = threading.Lock()
         self._profile: Dict = self._load()
 
     # ── Persistenz ────────────────────────────────────────────────────────────
@@ -102,15 +107,18 @@ class StyleLearner:
         """
         with self._lock:
             snapshot = dict(self._profile)
-        try:
-            tmp = _STYLE_FILE.with_suffix(".tmp")
-            tmp.write_text(
-                json.dumps(snapshot, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            tmp.replace(_STYLE_FILE)
-        except Exception as exc:
-            logger.error(f"Style-Profil speichern fehlgeschlagen: {exc}")
+        # BUG-C: _save_lock serialisiert den Schreibvorgang — kein gleichzeitiges
+        # Überschreiben der .tmp-Datei durch parallele _save()-Aufrufe möglich.
+        with self._save_lock:
+            try:
+                tmp = _STYLE_FILE.with_suffix(".tmp")
+                tmp.write_text(
+                    json.dumps(snapshot, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                tmp.replace(_STYLE_FILE)
+            except Exception as exc:
+                logger.error(f"Style-Profil speichern fehlgeschlagen: {exc}")
 
     # ── Lernlogik ─────────────────────────────────────────────────────────────
 

@@ -914,6 +914,7 @@ class GrokClient:
                     on_chunk(choice.delta.content)
 
             self._history.append({"role": "assistant", "content": final_content})
+            self._trim_history()   # BUG-D: History-Größe begrenzen
             return final_content
 
         # ── Phase 2b: Kein Tool-Call — Text-Antwort jetzt erst sprechen ──────
@@ -1003,6 +1004,7 @@ class GrokClient:
         )
         content = response.choices[0].message.content or ""
         self._history.append({"role": "assistant", "content": content})
+        self._trim_history()   # BUG-D: History-Größe begrenzen
         return content
 
     def _call_no_tools(self) -> str:
@@ -1016,6 +1018,7 @@ class GrokClient:
         )
         content = response.choices[0].message.content or ""
         self._history.append({"role": "assistant", "content": content})
+        self._trim_history()   # BUG-D: History-Größe begrenzen
         return content
 
     def _call(self) -> str:
@@ -1135,7 +1138,19 @@ class GrokClient:
         )
         content = final.choices[0].message.content or ""
         self._history.append({"role": "assistant", "content": content})
+        self._trim_history()   # BUG-D: History-Größe begrenzen
         return content
+
+    def _trim_history(self):
+        """BUG-D: _history wächst ohne Obergrenze — nach stundenlanger Nutzung
+        mit hunderten Exchanges ist das ein echter Memory-Leak.
+        _trimmed_history() begrenzt nur was an die API geht, nicht die Liste selbst.
+        Wir behalten _MAX_HISTORY * 3 Einträge als Puffer (Tool-Call-Sequenzen
+        bestehen aus mehreren Einträgen), alles Ältere wird verworfen.
+        """
+        limit = self._MAX_HISTORY * 3
+        if len(self._history) > limit:
+            self._history = self._history[-limit:]
 
     def clear_history(self):
         self._history.clear()

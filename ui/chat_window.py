@@ -382,7 +382,16 @@ class ChatWindow:
         self._jarvis.send_text_command(text)
 
     def _on_close(self):
+        # BUG-A: _root muss VOR destroy() auf None gesetzt werden.
+        # is_alive() prüft nur `self._root is not None` — ohne diesen Reset
+        # würden _on_state/_on_message nach dem Schließen noch self._root.after()
+        # auf dem zerstörten Widget aufrufen (→ TclError).
+        # BUG-E: Listener deregistrieren damit verwaiste Callbacks nicht weiter
+        # aufgerufen werden und sich im JarvisCore-Listener-Array ansammeln.
+        root, self._root = self._root, None
+        self._jarvis.off_state_change(self._on_state)
+        self._jarvis.off_message(self._on_message)
         try:
-            self._root.destroy()
+            root.destroy()
         except Exception:
             pass

@@ -946,10 +946,20 @@ class ControlPanel:
     # ── Live-Updates (thread-safe) ────────────────────────────────────────────
 
     def _on_state(self, state: State):
-        """Debounced (80 ms): schnell aufeinanderfolgende State-Wechsel werden zusammengefasst."""
+        """Debounced (80 ms): schnell aufeinanderfolgende State-Wechsel werden zusammengefasst.
+        BUG-F: _state_update_id wird aus einem Hintergrund-Thread gelesen und geschrieben
+        UND im Hauptthread (after()-Callback) zurückgesetzt — klassische TOCTOU-Race.
+        Fix: die gesamte Prüf-/Schedule-Logik per after(0) in den Hauptthread verlagern.
+        """
         if not self._hud_root:
             return
         self._pending_state = state
+        self._hud_root.after(0, self._schedule_state_update)
+
+    def _schedule_state_update(self):
+        """Läuft ausschließlich im Hauptthread — keine Race möglich."""
+        if not self._hud_root:
+            return
         if self._state_update_id is not None:
             try:
                 self._hud_root.after_cancel(self._state_update_id)
@@ -1024,7 +1034,18 @@ class ControlPanel:
         threading.Thread(target=self._jarvis.cancel_all_tasks, daemon=True).start()
 
     def _on_task_update(self, task_list: List):
-        """Callback vom TaskManager — throttled (max. 5×/s)."""
+        """Callback vom TaskManager — throttled (max. 5×/s).
+        BUG-F: _task_update_id wird aus dem TaskManager-Hintergrund-Thread gelesen
+        und geschrieben, aber im Hauptthread (after()-Callback) auf None zurückgesetzt
+        — TOCTOU-Race: zwei Threads sehen beide _task_update_id is None und planen
+        jeweils ein after() ein. Fix: Dispatch in den Hauptthread.
+        """
+        if not self._hud_root:
+            return
+        self._hud_root.after(0, self._schedule_task_update)
+
+    def _schedule_task_update(self):
+        """Läuft ausschließlich im Hauptthread — keine Race möglich."""
         if not self._hud_root:
             return
         if self._task_update_id is not None:

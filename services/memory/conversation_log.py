@@ -35,6 +35,10 @@ class ConversationLog:
     def __init__(self):
         self._file = _LOG_FILE
         self._lock = threading.Lock()
+        # BUG-B: Separates Lock für Disk-I/O — verhindert, dass zwei gleichzeitige
+        # _save()-Aufrufe (z.B. flush() beim Beenden + periodisches save_turn())
+        # sich beim Schreiben in dieselbe .tmp-Datei gegenseitig überschreiben.
+        self._save_lock = threading.Lock()
         self._sessions: List[Dict] = self._load()
         self._current_turns: List[Dict] = []
         self._session_start = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -69,15 +73,18 @@ class ConversationLog:
         # Auf Maximum begrenzen — älteste entfernen
         if len(all_sessions) > _MAX_SESSIONS:
             all_sessions = all_sessions[-_MAX_SESSIONS:]
-        try:
-            tmp = self._file.with_suffix(".tmp")
-            tmp.write_text(
-                json.dumps(all_sessions, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            tmp.replace(self._file)
-        except Exception as exc:
-            logger.error(f"ConversationLog speichern fehlgeschlagen: {exc}")
+        # BUG-B: _save_lock serialisiert den Schreibvorgang — kein gleichzeitiges
+        # Überschreiben der .tmp-Datei durch parallele _save()-Aufrufe möglich.
+        with self._save_lock:
+            try:
+                tmp = self._file.with_suffix(".tmp")
+                tmp.write_text(
+                    json.dumps(all_sessions, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                tmp.replace(self._file)
+            except Exception as exc:
+                logger.error(f"ConversationLog speichern fehlgeschlagen: {exc}")
 
     # ── Öffentliche API ───────────────────────────────────────────────────────
 

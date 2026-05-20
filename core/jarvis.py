@@ -258,8 +258,28 @@ class JarvisCore:
     def on_state_change(self, cb: Callable[[State], None]):
         self._state_listeners.append(cb)
 
+    def off_state_change(self, cb: Callable[[State], None]):
+        """BUG-E: Deregistriert einen State-Listener — verhindert Akkumulation
+        bei mehrfach geöffneten ChatWindows (jedes öffnen hängt einen neuen cb
+        an; die alten zerstörten Fenster-Callbacks bleiben ohne Dereg aktiv und
+        verursachen try/except-Zyklen bei jedem State-Wechsel).
+        """
+        try:
+            self._state_listeners.remove(cb)
+        except ValueError:
+            pass
+
     def on_message(self, cb: Callable[[str, str], None]):
         self._message_listeners.append(cb)
+
+    def off_message(self, cb: Callable[[str, str], None]):
+        """BUG-E: Deregistriert einen Message-Listener — selbes Problem wie bei
+        State-Listeners.
+        """
+        try:
+            self._message_listeners.remove(cb)
+        except ValueError:
+            pass
 
     def on_settings_change(self, cb: Callable[[], None]):
         """Registriert einen Listener der bei Settings-Änderungen benachrichtigt wird."""
