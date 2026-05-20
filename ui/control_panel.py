@@ -354,134 +354,120 @@ class ControlPanel:
         body.pack(fill="both", expand=True, padx=8, pady=(6, 0))
 
         # ── TON ───────────────────────────────────────────────────────────────
-        self._section(body, "TONE")
+        tc = self._collapsible(body, "TONE")
         cur_tone = getattr(self._jarvis.settings, "response_tone", "normal")
         self._tone_btns = {}
         _TONE_MODES = [
-            ("FORMAL",     "formal"),
-            ("NORMAL",     "normal"),
-            ("CASUAL",     "casual"),
-            ("TECHNICAL",  "technical"),
-            ("CREATIVE",   "creative"),
+            ("FORMAL",    "formal"),
+            ("NORMAL",    "normal"),
+            ("CASUAL",    "casual"),
+            ("TECHNICAL", "technical"),
+            ("CREATIVE",  "creative"),
         ]
-        tone_row1 = ctk.CTkFrame(body, fg_color="transparent")
-        tone_row1.pack(fill="x", pady=(0, 2))
+        tone_row1 = ctk.CTkFrame(tc, fg_color="transparent")
+        tone_row1.pack(fill="x", pady=(2, 1))
         tone_row1.columnconfigure((0, 1, 2), weight=1, uniform="tone1")
         for col, (lbl, val) in enumerate(_TONE_MODES[:3]):
-            is_active = (cur_tone == val)
-            kw = _ACTIVE_PURPLE() if is_active else _btn_inactive()
-            btn = ctk.CTkButton(
-                tone_row1, text=lbl, **kw,
+            kw = _ACTIVE_PURPLE() if cur_tone == val else _btn_inactive()
+            btn = ctk.CTkButton(tone_row1, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=22, corner_radius=3,
-                command=lambda v=val: self._set_tone(v),
-            )
+                command=lambda v=val: self._set_tone(v))
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._tone_btns[val] = btn
 
-        tone_row2 = ctk.CTkFrame(body, fg_color="transparent")
+        tone_row2 = ctk.CTkFrame(tc, fg_color="transparent")
         tone_row2.pack(fill="x", pady=(0, 2))
         tone_row2.columnconfigure((0, 1), weight=1, uniform="tone2")
         for col, (lbl, val) in enumerate(_TONE_MODES[3:]):
-            is_active = (cur_tone == val)
-            kw = _ACTIVE_PURPLE() if is_active else _btn_inactive()
-            btn = ctk.CTkButton(
-                tone_row2, text=lbl, **kw,
+            kw = _ACTIVE_PURPLE() if cur_tone == val else _btn_inactive()
+            btn = ctk.CTkButton(tone_row2, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=22, corner_radius=3,
-                command=lambda v=val: self._set_tone(v),
-            )
+                command=lambda v=val: self._set_tone(v))
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._tone_btns[val] = btn
 
         # ── KI-MODUS ──────────────────────────────────────────────────────────
-        self._section(body, "AI MODE")
+        ac = self._collapsible(body, "AI MODE")
         s = self._jarvis.settings
         _TOGGLE_MODES = [
-            ("MULTI-STEP",  "multi_step",     "multi_step_reasoning"),
-            ("PLANNING",    "task_planning",   "task_planning"),
-            ("PARALLEL",    "parallel_tasks",  "parallel_tasks"),
+            ("MULTI-STEP", "multi_step",     "multi_step_reasoning"),
+            ("PLANNING",   "task_planning",  "task_planning"),
+            ("PARALLEL",   "parallel_tasks", "parallel_tasks"),
         ]
         self._toggle_btns = {}
-        toggle_row = ctk.CTkFrame(body, fg_color="transparent")
-        toggle_row.pack(fill="x", pady=(0, 2))
+        toggle_row = ctk.CTkFrame(ac, fg_color="transparent")
+        toggle_row.pack(fill="x", pady=(2, 2))
         toggle_row.columnconfigure((0, 1, 2), weight=1, uniform="tog")
         for col, (lbl, key, setting_key) in enumerate(_TOGGLE_MODES):
             active = getattr(s, setting_key, False)
             kw = _ACTIVE_ORANGE() if active else _btn_inactive()
-            btn = ctk.CTkButton(
-                toggle_row, text=lbl, **kw,
+            btn = ctk.CTkButton(toggle_row, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=22, corner_radius=3,
-                command=lambda k=key: self._toggle_mode(k),
-            )
+                command=lambda k=key: self._toggle_mode(k))
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._toggle_btns[key] = btn
 
         # ── SPRACH-ANALYSE ────────────────────────────────────────────────────
-        self._section(body, "VOICE ANALYSIS")
+        vc = self._collapsible(body, "VOICE ANALYSIS", expanded=False)
         _ANALYSE_MODES = [
-            ("SPEAKER ID",    "speaker_recognition"),
-            ("EMOTION DETECT","emotion_detection"),
-            ("SMART PAUSE",   "smart_pause"),
-            ("INTERRUPT",     "interrupt_handling"),
-            ("WHISPER MODE",  "whisper_mode"),
-            ("MULTI CMD",     "multi_command"),
+            ("SPEAKER ID",     "speaker_recognition"),
+            ("EMOTION DETECT", "emotion_detection"),
+            ("SMART PAUSE",    "smart_pause"),
+            ("INTERRUPT",      "interrupt_handling"),
+            ("WHISPER MODE",   "whisper_mode"),
+            ("MULTI CMD",      "multi_command"),
         ]
         self._analyse_btns = {}
         for lbl, key in _ANALYSE_MODES:
             active = getattr(self._jarvis.settings, key, False)
             kw = _ACTIVE_GREEN() if active else _btn_inactive()
-            btn = ctk.CTkButton(
-                body, text=lbl, **kw,
+            btn = ctk.CTkButton(vc, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=26, corner_radius=3, anchor="w",
-                command=lambda k=key: self._toggle_analyse(k),
-            )
+                command=lambda k=key: self._toggle_analyse(k))
             btn.pack(fill="x", pady=1)
             self._analyse_btns[key] = btn
 
-        # Enrollment-Button
         self._enroll_btn = ctk.CTkButton(
-            body, text="▶  ENROLL VOICE",
+            vc, text="▶  ENROLL VOICE",
             fg_color="#001828", hover_color="#001A28",
-            border_width=1, border_color=_C_CYAN,
-            text_color=_C_CYAN,
+            border_width=1, border_color=_C_CYAN, text_color=_C_CYAN,
             font=ctk.CTkFont(family="Consolas", size=9),
             height=26, corner_radius=3,
             command=self._act_enroll_speaker,
         )
         self._enroll_lbl = ctk.CTkLabel(
-            body, text="",
+            vc, text="",
             font=ctk.CTkFont(family="Consolas", size=8), text_color=_C_DIM,
         )
         self._refresh_enroll_ui()
 
         # ── LERN & ADAPTION ───────────────────────────────────────────────────
-        self._section(body, "ADAPTATION")
+        adc = self._collapsible(body, "ADAPTATION", expanded=False)
         _ADAPTION_MODES = [
-            ("NOISE FILTER",     "noise_filter"),
-            ("LONG CONTEXT",     "long_term_context"),
-            ("RESUME CONV",      "conversation_resume"),
-            ("STYLE LEARN",      "style_learning"),
-            ("ADAPT TIMING",     "adaptive_response_time"),
-            ("ADAPTIVE ANS",     "adaptive_responses"),
+            ("NOISE FILTER",  "noise_filter"),
+            ("LONG CONTEXT",  "long_term_context"),
+            ("RESUME CONV",   "conversation_resume"),
+            ("STYLE LEARN",   "style_learning"),
+            ("ADAPT TIMING",  "adaptive_response_time"),
+            ("ADAPTIVE ANS",  "adaptive_responses"),
         ]
         self._adaption_btns = {}
         for lbl, key in _ADAPTION_MODES:
             active = getattr(self._jarvis.settings, key, False)
             kw = _ACTIVE_PURPLE() if active else _btn_inactive()
-            btn = ctk.CTkButton(
-                body, text=lbl, **kw,
+            btn = ctk.CTkButton(adc, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=26, corner_radius=3, anchor="w",
-                command=lambda k=key: self._toggle_adaption(k),
-            )
+                command=lambda k=key: self._toggle_adaption(k))
             btn.pack(fill="x", pady=1)
             self._adaption_btns[key] = btn
 
         # ── HÖRMODUS ──────────────────────────────────────────────────────────
-        self._section(body, "LISTEN MODE")
+        lc = self._collapsible(body, "LISTEN MODE", expanded=False)
         _HOER_MODES = [
             ("LOCAL WAKE WORD",   "local_wake_word"),
             ("BACKGROUND MODE",   "background_mode"),
@@ -491,95 +477,84 @@ class ControlPanel:
         for lbl, key in _HOER_MODES:
             active = getattr(self._jarvis.settings, key, False)
             kw = _ACTIVE_CYAN() if active else _btn_inactive()
-            btn = ctk.CTkButton(
-                body, text=lbl, **kw,
+            btn = ctk.CTkButton(lc, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=26, corner_radius=3, anchor="w",
-                command=lambda k=key: self._toggle_hoehmodus(k),
-            )
+                command=lambda k=key: self._toggle_hoehmodus(k))
             btn.pack(fill="x", pady=1)
             self._hoehmodus_btns[key] = btn
 
         # ── PERSÖNLICHKEIT ────────────────────────────────────────────────────
-        self._section(body, "PERSONALITY")
+        pc = self._collapsible(body, "PERSONALITY", expanded=False)
         _PERSONALITY_MODES = [
-            ("ASSISTANT",   "assistant"),
-            ("FRIEND",      "friend"),
-            ("BUTLER",      "butler"),
-            ("COACH",       "coach"),
-            ("SCIENTIST",   "scientist"),
+            ("ASSISTANT", "assistant"),
+            ("FRIEND",    "friend"),
+            ("BUTLER",    "butler"),
+            ("COACH",     "coach"),
+            ("SCIENTIST", "scientist"),
         ]
         cur_pers = getattr(self._jarvis.settings, "personality", "assistant")
         self._personality_btns = {}
 
-        pers_row1 = ctk.CTkFrame(body, fg_color="transparent")
-        pers_row1.pack(fill="x", pady=(0, 2))
+        pers_row1 = ctk.CTkFrame(pc, fg_color="transparent")
+        pers_row1.pack(fill="x", pady=(2, 1))
         pers_row1.columnconfigure((0, 1, 2), weight=1, uniform="pers1")
         for col, (lbl, val) in enumerate(_PERSONALITY_MODES[:3]):
-            is_active = (cur_pers == val)
-            kw = _ACTIVE_PURPLE() if is_active else _btn_inactive()
-            btn = ctk.CTkButton(
-                pers_row1, text=lbl, **kw,
+            kw = _ACTIVE_PURPLE() if cur_pers == val else _btn_inactive()
+            btn = ctk.CTkButton(pers_row1, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=22, corner_radius=3,
-                command=lambda v=val: self._set_personality(v),
-            )
+                command=lambda v=val: self._set_personality(v))
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._personality_btns[val] = btn
 
-        pers_row2 = ctk.CTkFrame(body, fg_color="transparent")
+        pers_row2 = ctk.CTkFrame(pc, fg_color="transparent")
         pers_row2.pack(fill="x", pady=(0, 2))
         pers_row2.columnconfigure((0, 1), weight=1, uniform="pers2")
         for col, (lbl, val) in enumerate(_PERSONALITY_MODES[3:]):
-            is_active = (cur_pers == val)
-            kw = _ACTIVE_PURPLE() if is_active else _btn_inactive()
-            btn = ctk.CTkButton(
-                pers_row2, text=lbl, **kw,
+            kw = _ACTIVE_PURPLE() if cur_pers == val else _btn_inactive()
+            btn = ctk.CTkButton(pers_row2, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=22, corner_radius=3,
-                command=lambda v=val: self._set_personality(v),
-            )
+                command=lambda v=val: self._set_personality(v))
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._personality_btns[val] = btn
 
         # ── VISION ────────────────────────────────────────────────────────────
-        self._section(body, "VISION")
+        vsc = self._collapsible(body, "VISION", expanded=False)
 
         ctk.CTkButton(
-            body, text="▶  OPEN CAMERA WINDOW",
+            vsc, text="▶  OPEN CAMERA WINDOW",
             fg_color="#001828", hover_color="#001A28",
-            border_width=1, border_color=_C_CYAN,
-            text_color=_C_CYAN,
+            border_width=1, border_color=_C_CYAN, text_color=_C_CYAN,
             font=ctk.CTkFont(family="Consolas", size=9),
             height=26, corner_radius=3, anchor="w",
             command=self._act_open_camera,
-        ).pack(fill="x", pady=(0, 2))
+        ).pack(fill="x", pady=(2, 1))
 
         _VISION_MODES = [
-            ("VISION ENABLED",    "vision_enabled"),
-            ("PROACTIVE HINTS",   "proactive_suggestions"),
-            ("DAY PLANNING",      "day_planning"),
-            ("MOOD RESPONSES",    "mood_based_responses"),
+            ("VISION ENABLED",  "vision_enabled"),
+            ("PROACTIVE HINTS", "proactive_suggestions"),
+            ("DAY PLANNING",    "day_planning"),
+            ("MOOD RESPONSES",  "mood_based_responses"),
         ]
         self._vision_btns = {}
         for lbl, key in _VISION_MODES:
             active = getattr(self._jarvis.settings, key, False)
             kw = _ACTIVE_GREEN() if active else _btn_inactive()
-            btn = ctk.CTkButton(
-                body, text=lbl, **kw,
+            btn = ctk.CTkButton(vsc, text=lbl, **kw,
                 font=ctk.CTkFont(family="Consolas", size=9),
                 height=26, corner_radius=3, anchor="w",
-                command=lambda k=key: self._toggle_vision(k),
-            )
+                command=lambda k=key: self._toggle_vision(k))
             btn.pack(fill="x", pady=1)
             self._vision_btns[key] = btn
 
         # ── KONFIDENZ ─────────────────────────────────────────────────────────
-        self._section(body, "CONFIDENCE")
-        conf_row = ctk.CTkFrame(body, fg_color=_C_CARD,
+        cc = self._collapsible(body, "CONFIDENCE", expanded=False)
+        conf_row = ctk.CTkFrame(cc, fg_color=_C_CARD,
                                 border_width=1, border_color=_C_BORDER,
                                 corner_radius=3, height=32)
-        conf_row.pack(fill="x", pady=(0, 2))
+        conf_row.pack(fill="x", pady=(2, 1))
         conf_row.pack_propagate(False)
 
         self._confidence_dots = ctk.CTkLabel(
@@ -595,15 +570,15 @@ class ControlPanel:
         )
         self._confidence_val.place(relx=1.0, x=-10, rely=0.5, anchor="e")
 
-        self._btn(body, "◈  IMPROVE RESPONSE", self._act_improve)
+        self._btn(cc, "◈  IMPROVE RESPONSE", self._act_improve)
 
         # ── TASK QUEUE ────────────────────────────────────────────────────────
-        self._section(body, "TASK QUEUE")
+        qc = self._collapsible(body, "TASK QUEUE", expanded=False)
 
-        task_frame = ctk.CTkFrame(body, fg_color=_C_CARD,
+        task_frame = ctk.CTkFrame(qc, fg_color=_C_CARD,
                                   border_width=1, border_color=_C_BORDER,
                                   corner_radius=3)
-        task_frame.pack(fill="x", pady=(0, 2))
+        task_frame.pack(fill="x", pady=(2, 2))
 
         task_top = ctk.CTkFrame(task_frame, fg_color="transparent")
         task_top.pack(fill="x", padx=8, pady=(6, 0))
@@ -637,8 +612,7 @@ class ControlPanel:
         ctk.CTkButton(
             task_bot, text="STOP",
             fg_color=_C_BG, hover_color="#1A0010",
-            border_width=1, border_color="#4A1020",
-            text_color="#AA3040",
+            border_width=1, border_color="#4A1020", text_color="#AA3040",
             font=ctk.CTkFont(family="Consolas", size=9),
             height=20, corner_radius=3,
             command=self._act_cancel_task,
@@ -653,20 +627,19 @@ class ControlPanel:
         ).grid(row=0, column=2, padx=1, sticky="ew")
 
         # ── AUTOMATISIERUNG ───────────────────────────────────────────────────
-        self._section(body, "AUTOMATION")
+        autoc = self._collapsible(body, "AUTOMATION", expanded=False)
 
         ctk.CTkButton(
-            body, text="+  ADD AUTOMATION",
+            autoc, text="+  ADD AUTOMATION",
             fg_color=_C_BG, hover_color="#001A28",
-            border_width=1, border_color=_C_BORDER,
-            text_color=_C_DIMMED,
+            border_width=1, border_color=_C_BORDER, text_color=_C_DIMMED,
             font=ctk.CTkFont(family="Consolas", size=9),
             height=26, corner_radius=3,
             command=self._act_add_recurring,
-        ).pack(fill="x", pady=(0, 2))
+        ).pack(fill="x", pady=(2, 1))
 
         self._recurring_frame = ctk.CTkScrollableFrame(
-            body, fg_color=_C_CARD, corner_radius=3, height=72,
+            autoc, fg_color=_C_CARD, corner_radius=3, height=72,
             border_width=1, border_color=_C_BORDER,
             scrollbar_button_color=_C_BORDER,
             scrollbar_button_hover_color=_C_DIMMED,
@@ -675,20 +648,20 @@ class ControlPanel:
         self._refresh_recurring_ui()
 
         # ── GESPRÄCH ──────────────────────────────────────────────────────────
-        self._section(body, "CHAT")
-        self._btn(body, "▶  OPEN CHAT",       self._act_chat,   primary=True)
-        self._btn(body, "◈  SHOW HUD",         self._act_hud)
-        self._btn(body, "✕  CLEAR HISTORY",    self._act_clear,  danger=True)
+        chc = self._collapsible(body, "CHAT")
+        self._btn(chc, "▶  OPEN CHAT",      self._act_chat,  primary=True)
+        self._btn(chc, "◈  SHOW HUD",        self._act_hud)
+        self._btn(chc, "✕  CLEAR HISTORY",   self._act_clear, danger=True)
 
         # ── MEMORY ────────────────────────────────────────────────────────────
-        self._section(body, "MEMORY")
-        self._btn(body, "◈  MEMORY MANAGER",  self._act_memory)
-        self._btn(body, "▼  BACKUP MEMORY",   self._act_backup)
+        mc = self._collapsible(body, "MEMORY")
+        self._btn(mc, "◈  MEMORY MANAGER",  self._act_memory)
+        self._btn(mc, "▼  BACKUP MEMORY",   self._act_backup)
 
         # ── SYSTEM ────────────────────────────────────────────────────────────
-        self._section(body, "SYSTEM")
-        self._btn(body, "◈  RECALIBRATE MIC", self._act_recalibrate)
-        self._btn(body, "⚙  SETTINGS",        self._act_settings)
+        sc = self._collapsible(body, "SYSTEM")
+        self._btn(sc, "◈  RECALIBRATE MIC", self._act_recalibrate)
+        self._btn(sc, "⚙  SETTINGS",        self._act_settings)
 
         # ── Footer / Beenden ──────────────────────────────────────────────────
         footer = ctk.CTkFrame(win, fg_color=_C_CARD, corner_radius=0,
@@ -717,6 +690,47 @@ class ControlPanel:
             font=ctk.CTkFont(family="Consolas", size=8),
             text_color=_C_DIM, fg_color=_C_BG, anchor="w",
         ).place(x=4, rely=0.5, anchor="w")
+
+    def _collapsible(self, parent, title: str, expanded: bool = True) -> ctk.CTkFrame:
+        """
+        Erstellt einen klickbaren Section-Header mit ausklappbarem Content-Frame.
+        Gibt den Content-Frame zurück. Widgets müssen als Kind des Content-Frames
+        angelegt werden, nicht als Kind von parent.
+        """
+        state = {"open": expanded}
+
+        # Header-Button (klickbar, gesamte Breite)
+        arrow = "▼" if expanded else "▶"
+        btn = ctk.CTkButton(
+            parent,
+            text=f" {arrow}  // {title}",
+            fg_color=_C_CARD,
+            hover_color="#080E18",
+            border_width=1,
+            border_color=_C_BORDER,
+            text_color=_C_DIMMED,
+            font=ctk.CTkFont(family="Consolas", size=8),
+            height=22, corner_radius=3, anchor="w",
+        )
+        btn.pack(fill="x", pady=(6, 0))
+
+        # Content-Frame (wird ein-/ausgeblendet)
+        content = ctk.CTkFrame(parent, fg_color="transparent")
+        if expanded:
+            content.pack(fill="x", pady=(0, 0))
+
+        def _toggle():
+            if state["open"]:
+                content.pack_forget()
+                btn.configure(text=f" ▶  // {title}")
+                state["open"] = False
+            else:
+                content.pack(fill="x", pady=(0, 0))
+                btn.configure(text=f" ▼  // {title}")
+                state["open"] = True
+
+        btn.configure(command=_toggle)
+        return content
 
     def _btn(self, parent, text: str, cmd, primary: bool = False, danger: bool = False):
         if primary:
