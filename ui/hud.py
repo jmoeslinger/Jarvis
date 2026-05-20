@@ -13,7 +13,7 @@ logger = logging.getLogger("jarvis.hud")
 # ── Farben & Texte je State ───────────────────────────────────────────────────
 
 _STATE_COLOR = {
-    State.IDLE:           "#1C2C3C",
+    State.IDLE:           "#3A6080",
     State.WAKE_LISTENING: "#00BFFF",
     State.CMD_LISTENING:  "#00FF88",
     State.PROCESSING:     "#FF9500",
@@ -89,7 +89,7 @@ class HUD:
             hotkey = self._jarvis.settings.activation_hotkey.upper()
             self._root.after(0, lambda: self._msg_lbl.configure(
                 text=f"[ {hotkey} ]  ready for input...",
-                text_color="#102030",
+                text_color="#2A5070",
             ))
 
     def set_open_panel_callback(self, cb):
@@ -160,7 +160,7 @@ class HUD:
             top,
             text=_STATE_LABEL[self._state],
             font=ctk.CTkFont(family="Consolas", size=9),
-            text_color="#1C3040",
+            text_color="#3A6080",
         )
         self._state_lbl.pack(side="left", padx=(6, 0))
 
@@ -182,7 +182,7 @@ class HUD:
         ctk.CTkButton(
             top, text="✕", width=18,
             font=ctk.CTkFont(size=9),
-            text_color="#2A1A24",
+            text_color="#804060",
             hover_color="#1A0810",
             fg_color="#080C14",
             corner_radius=3,
@@ -192,7 +192,7 @@ class HUD:
         ctk.CTkButton(
             top, text="⚙", width=20,
             font=ctk.CTkFont(size=10),
-            text_color="#1C4060",
+            text_color="#3A7090",
             **_ibtn,
             command=self._on_panel_click,
         ).pack(side="right", padx=(2, 0))
@@ -200,7 +200,7 @@ class HUD:
         ctk.CTkButton(
             top, text="🎤", width=20,
             font=ctk.CTkFont(size=9),
-            text_color="#1C4060",
+            text_color="#3A7090",
             **_ibtn,
             command=self._on_mic_click,
         ).pack(side="right", padx=(2, 0))
@@ -208,7 +208,7 @@ class HUD:
         self._stop_btn = ctk.CTkButton(
             top, text="■", width=20,
             font=ctk.CTkFont(size=9),
-            text_color="#3A1020",
+            text_color="#AA3040",
             hover_color="#140408",
             fg_color="#080C14",
             corner_radius=3,
@@ -227,7 +227,7 @@ class HUD:
             outer,
             text=f"[ {hotkey} ]  ready for input...",
             font=ctk.CTkFont(family="Consolas", size=9),
-            text_color="#102030",
+            text_color="#2A5070",
             wraplength=_HUD_W - 18,
             justify="left",
             anchor="w",
