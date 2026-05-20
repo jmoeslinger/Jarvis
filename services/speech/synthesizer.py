@@ -125,9 +125,13 @@ class SentencePipeline:
                 if not self._stopped:
                     self._audio_queue.put(("fallback", sentence))
 
-        # Synth-Thread fertig → Sentinel an Player-Thread schicken
-        if not self._stopped:
-            self._audio_queue.put(None)
+        # Synth-Thread fertig → Sentinel an Player-Thread schicken.
+        # BUG-NEW-3: Sentinel wurde nur gesendet wenn not self._stopped.
+        # Wenn stop() während der Verarbeitung aufgerufen wird, bekommt der
+        # Player-Thread nie den Sentinel und blockiert 60s auf get(timeout=60).
+        # _done.set() wird dann nie aufgerufen → finish() hängt 30s.
+        # Fix: Sentinel immer senden — Player-Thread prüft selbst _stopped.
+        self._audio_queue.put(None)
 
     def _player_loop(self):
         """Spielt Audio-Daten der Reihe nach ab."""

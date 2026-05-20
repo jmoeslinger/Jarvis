@@ -197,10 +197,17 @@ class RouterClient:
         logger.info("Gesprächsverlauf (alle Provider) gelöscht.")
 
     def restore_history(self, history: list):
-        """BUG-002: Thread-sicheres Wiederherstellen der History fuer alle Provider."""
+        """BUG-002: Thread-sicheres Wiederherstellen der History fuer alle Provider.
+        BUG-NEW-7: client._history direkt zu setzen umgeht den client._history_lock,
+        der seit BUG-NEW-5 in GrokClient existiert. Zugriff nun unter Client-Lock.
+        """
         with self._history_lock:
             self._history = list(history)
-            for _, client in self._providers:
+        for _, client in self._providers:
+            if hasattr(client, "_history_lock"):
+                with client._history_lock:
+                    client._history = list(history)
+            else:
                 client._history = list(history)
 
     # ── Routing-Kern ──────────────────────────────────────────────────────────
@@ -238,14 +245,29 @@ class RouterClient:
                     pass
 
     def _sync_to(self, client):
-        """Setzt die History des Clients auf den aktuellen Router-Stand."""
+        """Setzt die History des Clients auf den aktuellen Router-Stand.
+        BUG-NEW-9: client._history direkt zu setzen umgeht den client._history_lock.
+        Zugriff nun unter Client-Lock um Race mit clear_history() zu vermeiden.
+        """
         with self._history_lock:
-            client._history = list(self._history)
+            snapshot = list(self._history)
+        if hasattr(client, "_history_lock"):
+            with client._history_lock:
+                client._history = snapshot
+        else:
+            client._history = snapshot
 
     def _sync_from(self, client):
-        """Übernimmt die History nach einem erfolgreichen Call."""
+        """Übernimmt die History nach einem erfolgreichen Call.
+        BUG-NEW-9: client._history direkt zu lesen umgeht den client._history_lock.
+        """
+        if hasattr(client, "_history_lock"):
+            with client._history_lock:
+                snapshot = list(client._history)
+        else:
+            snapshot = list(client._history)
         with self._history_lock:
-            self._history = list(client._history)
+            self._history = snapshot
 
     # ── Chat-Methoden (gleiche API wie GrokClient) ────────────────────────────
 

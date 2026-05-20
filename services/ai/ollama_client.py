@@ -44,9 +44,14 @@ class OllamaClient(GrokClient):
         from openai import OpenAI
         # GrokClient.__init__ nicht aufrufen — direkt initialisieren
         # BUG-025: alle GrokClient-Attribute explizit setzen um AttributeError zu vermeiden
+        import threading as _threading
         self._client            = OpenAI(api_key="ollama", base_url=base_url)
         self._model             = model
         self._history           = []
+        # BUG-NEW-6: OllamaClient überspringt GrokClient.__init__ und initialisiert
+        # alle Attribute manuell. _history_lock fehlte → _trim_history() und
+        # clear_history() werfen AttributeError wenn OllamaClient aktiv ist.
+        self._history_lock      = _threading.Lock()
         self._tools             = {}
         self._get_memories      = get_memories
         self._current_query     = ""

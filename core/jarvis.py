@@ -285,6 +285,20 @@ class JarvisCore:
         """Registriert einen Listener der bei Settings-Änderungen benachrichtigt wird."""
         self._settings_listeners.append(cb)
 
+    def off_settings_change(self, cb: Callable[[], None]):
+        """BUG-NEW-10: Fehlende Deregistrierungs-Methode fuer Settings-Listener.
+        on_settings_change() hat on_state_change/on_message analoge Gegenstuecke
+        (off_state_change, off_message) — aber off_settings_change fehlte.
+        Ohne diese Methode akkumulieren veraltete Listener-Callbacks in
+        _settings_listeners (z.B. vom ControlPanel nach erneutem Oeffnen/Schliessen)
+        und verursachen Fehler in _fire_settings_changed() weil das zugehoerige
+        Tkinter-Widget bereits zerstoert wurde.
+        """
+        try:
+            self._settings_listeners.remove(cb)
+        except ValueError:
+            pass
+
     def _fire_settings_changed(self):
         """Informiert alle Settings-Listener (z. B. Control Panel).
         BUG-062: Snapshot der Liste vor Iteration — verhindert Race bei gleichzeitigem append().

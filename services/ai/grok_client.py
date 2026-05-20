@@ -519,6 +519,10 @@ class GrokClient:
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
         self._history: List[Dict[str, Any]] = []
+        # BUG-NEW-5: _history wird von mehreren Threads gleichzeitig gelesen und
+        # geschrieben (z.B. parallel Tool-Threads + Streaming-Thread + clear_history
+        # aus dem UI-Thread). Ein Lock serialisiert den Zugriff auf _history.
+        self._history_lock = threading.Lock()
         self._tools: Dict[str, Callable] = {}
         self._get_memories = get_memories   # callable → memory string
         self._current_query = ""            # aktuelle Nutzerfrage für Memory-Kontext
@@ -920,6 +924,9 @@ class GrokClient:
         # ── Phase 2b: Kein Tool-Call — Text-Antwort jetzt erst sprechen ──────
         # accumulated_content enthält die vollständige Antwort.
         # Wir prüfen zusätzlich auf Llama-Format-Funktionsaufrufe im Text.
+        # BUG-NEW-4: _trim_history() wurde nur in Phase 2a (Tool-Call-Pfad) aufgerufen.
+        # In Phase 2b (normale Textantwort) wuchs _history unbegrenzt.
+        # Fix: _trim_history() am Ende von Phase 2b ebenfalls aufrufen.
         if accumulated_content:
             # Llama-Format <function=...> herausfiltern bevor gesprochen wird
             clean = re.sub(r"<function=.*?</function>", "", accumulated_content,
@@ -955,6 +962,7 @@ class GrokClient:
                 self._history.append({"role": "assistant", "content": accumulated_content})
         else:
             self._history.append({"role": "assistant", "content": accumulated_content})
+        self._trim_history()   # BUG-NEW-4: Phase-2b braucht auch den Trim
         return accumulated_content
 
     def _recover_from_failed_tool(self, err_str: str) -> str:
@@ -1149,11 +1157,17 @@ class GrokClient:
         bestehen aus mehreren Einträgen), alles Ältere wird verworfen.
         """
         limit = self._MAX_HISTORY * 3
-        if len(self._history) > limit:
-            self._history = self._history[-limit:]
+        with self._history_lock:
+            if len(self._history) > limit:
+                self._history = self._history[-limit:]
 
     def clear_history(self):
-        self._history.clear()
+        # BUG-NEW-5: clear_history() wird aus UI-Threads aufgerufen (hud.py,
+        # control_panel.py) während chat_streaming() im Hintergrund-Thread
+        # gerade _history liest/schreibt. Ohne Lock → Race Condition /
+        # list-clear mitten in einer Iteration.
+        with self._history_lock:
+            self._history.clear()
         logger.info("Gesprächsverlauf gelöscht.")
 
     @property

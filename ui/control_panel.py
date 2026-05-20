@@ -171,7 +171,12 @@ class ControlPanel:
             logger.warning("ControlPanel.show(): HUD-Root nicht verfügbar nach 10s.")
 
     def is_alive(self) -> bool:
-        return self._win is not None and self._win.winfo_exists()
+        # BUG-NEW-2: winfo_exists() ist nicht thread-sicher und darf nur im
+        # Hauptthread aufgerufen werden. Diese Methode wird aber auch aus
+        # Hintergrund-Threads aufgerufen (_on_state, _on_message).
+        # Als thread-sicherer Proxy nur self._win prüfen — der eigentliche
+        # winfo_exists()-Check findet in after()-Callbacks im Hauptthread statt.
+        return self._win is not None
 
     # ── Fenster-Lifecycle ─────────────────────────────────────────────────────
 
@@ -1332,6 +1337,18 @@ class ControlPanel:
     # ── Settings-Refresh (debounced) ──────────────────────────────────────────
 
     def _on_settings_changed(self):
+        """Debounced (150 ms): Settings-Änderungen werden zusammengefasst.
+        BUG-NEW-1: _settings_refresh_id wird aus einem Hintergrund-Thread gelesen
+        und geschrieben, aber im Hauptthread (after()-Callback) auf None zurückgesetzt
+        — TOCTOU-Race identisch zum bereits gefixten _on_state/_on_task_update.
+        Fix: gesamte Prüf-/Schedule-Logik per after(0) in den Hauptthread verlagern.
+        """
+        if not self._hud_root:
+            return
+        self._hud_root.after(0, self._schedule_settings_refresh)
+
+    def _schedule_settings_refresh(self):
+        """Läuft ausschließlich im Hauptthread — keine Race möglich."""
         if not self._hud_root:
             return
         if self._settings_refresh_id is not None:

@@ -331,9 +331,21 @@ class MemoryStore:
             found = [e for e in self._entries if q in e.content.lower()]
             if not found:
                 # Fuzzy-Fallback
+                # BUG-NEW-8: contents.index(c) liefert immer den ERSTEN Index des
+                # Strings — wenn zwei Eintraege identischen (lowercase) Content haben,
+                # wird derselbe Eintrag zweimal zurueckgegeben (Duplikat), waehrend
+                # der zweite Eintrag nie erreichbar ist.
+                # Fix: enumerate() nutzen und per Index direkt zugreifen.
                 contents = [e.content.lower() for e in self._entries]
                 close    = difflib.get_close_matches(q, contents, n=5, cutoff=0.45)
-                found    = [self._entries[contents.index(c)] for c in close]
+                seen_ids: set = set()
+                found = []
+                for c in close:
+                    for idx, lc in enumerate(contents):
+                        if lc == c and self._entries[idx].id not in seen_ids:
+                            seen_ids.add(self._entries[idx].id)
+                            found.append(self._entries[idx])
+                            break
             if not found:
                 return f"Keine gespeicherten Informationen zu '{query}' gefunden."
             lines = [f"- [{e.category}] {e.content}" for e in found]
