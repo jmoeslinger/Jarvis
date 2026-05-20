@@ -13,27 +13,27 @@ logger = logging.getLogger("jarvis.hud")
 # ── Farben & Texte je State ───────────────────────────────────────────────────
 
 _STATE_COLOR = {
-    State.IDLE:           "#444455",
-    State.WAKE_LISTENING: "#2255CC",
-    State.CMD_LISTENING:  "#22AA55",
-    State.PROCESSING:     "#BB8800",
-    State.SPEAKING:       "#22AA55",
-    State.ERROR:          "#CC2233",
+    State.IDLE:           "#1C2C3C",
+    State.WAKE_LISTENING: "#00BFFF",
+    State.CMD_LISTENING:  "#00FF88",
+    State.PROCESSING:     "#FF9500",
+    State.SPEAKING:       "#00FF88",
+    State.ERROR:          "#FF2060",
 }
 
 _STATE_LABEL = {
-    State.IDLE:           "Inaktiv",
-    State.WAKE_LISTENING: "Hört zu...",
-    State.CMD_LISTENING:  "Sprich jetzt",
-    State.PROCESSING:     "Denkt...",
-    State.SPEAKING:       "Spricht",
-    State.ERROR:          "Fehler",
+    State.IDLE:           "STANDBY",
+    State.WAKE_LISTENING: "LISTENING",
+    State.CMD_LISTENING:  "RECORDING",
+    State.PROCESSING:     "THINKING",
+    State.SPEAKING:       "SPEAKING",
+    State.ERROR:          "ERROR",
 }
 
 _PULSE_STATES = {State.WAKE_LISTENING, State.CMD_LISTENING, State.PROCESSING, State.SPEAKING}
 
-_HUD_W = 258
-_HUD_H  = 74
+_HUD_W = 270
+_HUD_H  = 78
 
 
 class HUD:
@@ -48,6 +48,7 @@ class HUD:
         self._msg_lbl:    Optional[ctk.CTkLabel] = None
         self._net_dot:    Optional[ctk.CTkLabel] = None
         self._stop_btn:   Optional[ctk.CTkButton] = None
+        self._accent_bar: Optional[ctk.CTkFrame]  = None
         self._pulse_alpha = 1.0
         self._pulse_dir   = -1
         self._hidden = False
@@ -72,8 +73,8 @@ class HUD:
         self._root.geometry(f"{_HUD_W}x{_HUD_H}+80+80")
         self._root.overrideredirect(True)           # kein Titelbalken
         self._root.attributes("-topmost", True)     # immer im Vordergrund
-        self._root.attributes("-alpha", 0.95)
-        self._root.configure(fg_color="#07070F")
+        self._root.attributes("-alpha", 0.96)
+        self._root.configure(fg_color="#030305")
 
         self._build_ui()
         self._register_callbacks()
@@ -87,8 +88,8 @@ class HUD:
         if self._root and self._msg_lbl and not self._last_msg:
             hotkey = self._jarvis.settings.activation_hotkey.upper()
             self._root.after(0, lambda: self._msg_lbl.configure(
-                text=f"{hotkey}  ·  Hey Jarvis...",
-                text_color="#333355",
+                text=f"[ {hotkey} ]  ready for input...",
+                text_color="#102030",
             ))
 
     def set_open_panel_callback(self, cb):
@@ -116,120 +117,122 @@ class HUD:
     # ------------------------------------------------------------------
 
     def _build_ui(self):
+        # ── State-Accent-Bar (oben, ändert Farbe mit State) ──────────
+        self._accent_bar = ctk.CTkFrame(
+            self._root, height=2, corner_radius=0,
+            fg_color=_STATE_COLOR[self._state],
+        )
+        self._accent_bar.pack(fill="x")
+
         # ── Äußerer Rahmen ────────────────────────────────────────────
         outer = ctk.CTkFrame(
             self._root,
-            fg_color="#0B0B1A",
-            corner_radius=12,
+            fg_color="#060810",
+            corner_radius=0,
             border_width=1,
-            border_color="#1C1C38",
+            border_color="#0A1422",
         )
-        outer.pack(fill="both", expand=True, padx=1, pady=1)
+        outer.pack(fill="both", expand=True)
 
-        # Drag-Handling (auf gesamten Rahmen)
+        # Drag-Handling
         outer.bind("<ButtonPress-1>",   self._drag_start)
         outer.bind("<B1-Motion>",       self._drag_move)
 
-        # ── Obere Zeile: Dot + JARVIS + State + Net + Buttons ────────
+        # ── Obere Zeile ───────────────────────────────────────────────
         top = ctk.CTkFrame(outer, fg_color="transparent")
-        top.pack(fill="x", padx=10, pady=(8, 3))
+        top.pack(fill="x", padx=10, pady=(7, 0))
 
         self._dot_lbl = ctk.CTkLabel(
-            top,
-            text="●",
-            font=ctk.CTkFont(size=11),
+            top, text="◆",
+            font=ctk.CTkFont(size=8),
             text_color=_STATE_COLOR[self._state],
-            width=14,
+            width=12,
         )
         self._dot_lbl.pack(side="left")
 
         ctk.CTkLabel(
-            top,
-            text="JARVIS",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            text_color="#2B5FD9",
-        ).pack(side="left", padx=(5, 0))
+            top, text="JRV//",
+            font=ctk.CTkFont(family="Consolas", size=11, weight="bold"),
+            text_color="#00BFFF",
+        ).pack(side="left", padx=(4, 0))
 
         self._state_lbl = ctk.CTkLabel(
             top,
             text=_STATE_LABEL[self._state],
-            font=ctk.CTkFont(family="Segoe UI", size=10),
-            text_color="#606078",
+            font=ctk.CTkFont(family="Consolas", size=9),
+            text_color="#1C3040",
         )
-        self._state_lbl.pack(side="left", padx=(8, 0))
+        self._state_lbl.pack(side="left", padx=(6, 0))
 
-        # Internet-Status-Punkt
         self._net_dot = ctk.CTkLabel(
-            top,
-            text="●",
+            top, text="◉",
             font=ctk.CTkFont(size=7),
-            text_color="#1A9944",
+            text_color="#00CC66",
             width=12,
         )
-        self._net_dot.pack(side="left", padx=(6, 0))
+        self._net_dot.pack(side="left", padx=(5, 0))
 
-        # ── Buttons (rechts, kompakt) ─────────────────────────────────
-        _ibtn = dict(height=20, corner_radius=5,
-                     fg_color="#12122A", hover_color="#1E1E40")
+        # ── Buttons rechts ────────────────────────────────────────────
+        _ibtn = dict(
+            height=18, corner_radius=3,
+            fg_color="#080C14", hover_color="#0C1420",
+            border_width=1, border_color="#0A1828",
+        )
 
-        # Close
         ctk.CTkButton(
-            top, text="✕", width=20,
-            font=ctk.CTkFont(size=10),
-            text_color="#554455",
-            hover_color="#2A0A18",
-            fg_color="#12122A",
-            corner_radius=5,
+            top, text="✕", width=18,
+            font=ctk.CTkFont(size=9),
+            text_color="#2A1A24",
+            hover_color="#1A0810",
+            fg_color="#080C14",
+            corner_radius=3,
             command=self.hide,
-        ).pack(side="right", padx=(3, 0))
+        ).pack(side="right", padx=(2, 0))
 
-        # Panel ⚙
         ctk.CTkButton(
-            top, text="⚙", width=22,
-            font=ctk.CTkFont(size=11),
-            text_color="#5577BB",
+            top, text="⚙", width=20,
+            font=ctk.CTkFont(size=10),
+            text_color="#1C4060",
             **_ibtn,
             command=self._on_panel_click,
-        ).pack(side="right", padx=(3, 0))
+        ).pack(side="right", padx=(2, 0))
 
-        # Mikrofon 🎤
         ctk.CTkButton(
-            top, text="🎤", width=22,
-            font=ctk.CTkFont(size=10),
-            text_color="#7799CC",
+            top, text="🎤", width=20,
+            font=ctk.CTkFont(size=9),
+            text_color="#1C4060",
             **_ibtn,
             command=self._on_mic_click,
-        ).pack(side="right", padx=(3, 0))
+        ).pack(side="right", padx=(2, 0))
 
-        # Stop ■
         self._stop_btn = ctk.CTkButton(
-            top, text="■", width=22,
-            font=ctk.CTkFont(size=10),
-            text_color="#553333",
-            hover_color="#2A0A0A",
-            fg_color="#12122A",
-            corner_radius=5,
+            top, text="■", width=20,
+            font=ctk.CTkFont(size=9),
+            text_color="#3A1020",
+            hover_color="#140408",
+            fg_color="#080C14",
+            corner_radius=3,
             command=self._on_stop_click,
         )
-        self._stop_btn.pack(side="right", padx=(3, 0))
+        self._stop_btn.pack(side="right", padx=(2, 0))
 
         # ── Trennlinie ────────────────────────────────────────────────
-        ctk.CTkFrame(outer, height=1, fg_color="#161630", corner_radius=0).pack(
-            fill="x", padx=8
+        ctk.CTkFrame(outer, height=1, fg_color="#0A1422", corner_radius=0).pack(
+            fill="x", padx=0, pady=(6, 0)
         )
 
         # ── Nachrichtenzeile ──────────────────────────────────────────
         hotkey = self._jarvis.settings.activation_hotkey.upper()
         self._msg_lbl = ctk.CTkLabel(
             outer,
-            text=f"{hotkey}  ·  Hey Jarvis...",
-            font=ctk.CTkFont(family="Segoe UI", size=10),
-            text_color="#333355",
-            wraplength=_HUD_W - 22,
+            text=f"[ {hotkey} ]  ready for input...",
+            font=ctk.CTkFont(family="Consolas", size=9),
+            text_color="#102030",
+            wraplength=_HUD_W - 18,
             justify="left",
             anchor="w",
         )
-        self._msg_lbl.pack(fill="x", padx=12, pady=(4, 7), anchor="w")
+        self._msg_lbl.pack(fill="x", padx=10, pady=(4, 6), anchor="w")
         self._msg_lbl.bind("<ButtonPress-1>",  self._drag_start)
         self._msg_lbl.bind("<B1-Motion>",      self._drag_move)
 
@@ -254,27 +257,36 @@ class HUD:
         if not self.is_alive():
             return
 
+        state_color = _STATE_COLOR.get(self._state, "#1C2C3C")
+
         if self._state in _PULSE_STATES:
             self._pulse_alpha += self._pulse_dir * 0.06
-            if self._pulse_alpha <= 0.3:
+            if self._pulse_alpha <= 0.25:
                 self._pulse_dir = 1
             elif self._pulse_alpha >= 1.0:
                 self._pulse_dir = -1
-
-            color = _STATE_COLOR.get(self._state, "#444455")
-            faded = self._blend_color(color, self._pulse_alpha)
+            faded = self._blend_color(state_color, self._pulse_alpha)
             if self._dot_lbl:
                 self._dot_lbl.configure(text_color=faded)
+            if self._accent_bar:
+                self._accent_bar.configure(fg_color=faded)
+            if self._state_lbl:
+                self._state_lbl.configure(text_color=self._blend_color(state_color, self._pulse_alpha * 0.7))
         else:
             if self._dot_lbl:
-                self._dot_lbl.configure(text_color=_STATE_COLOR.get(self._state, "#444455"))
+                self._dot_lbl.configure(text_color=state_color)
+            if self._accent_bar:
+                self._accent_bar.configure(fg_color=state_color)
+            if self._state_lbl:
+                self._state_lbl.configure(text_color=self._blend_color(state_color, 0.5))
 
-        # Stop-Button Sichtbarkeit je nach State
+        # Stop-Button: leuchtet auf wenn aktiv
         if self._stop_btn:
             active = self._state in (State.SPEAKING, State.CMD_LISTENING)
-            color = "#CC2233" if active else "#664444"
-            hover = "#AA1122" if active else "#441122"
-            self._stop_btn.configure(text_color=color, hover_color=hover)
+            self._stop_btn.configure(
+                text_color="#FF2060" if active else "#3A1020",
+                hover_color="#200008" if active else "#140408",
+            )
 
         self._root.after(60, self._tick)
 
@@ -283,7 +295,7 @@ class HUD:
         r = int(hex_color[1:3], 16)
         g = int(hex_color[3:5], 16)
         b = int(hex_color[5:7], 16)
-        bg_r, bg_g, bg_b = 11, 11, 26
+        bg_r, bg_g, bg_b = 6, 8, 16
         r = int(r * alpha + bg_r * (1 - alpha))
         g = int(g * alpha + bg_g * (1 - alpha))
         b = int(b * alpha + bg_b * (1 - alpha))
@@ -350,7 +362,7 @@ class HUD:
                 def _apply_partial(p=preview):
                     try:
                         if self._msg_lbl and self._msg_lbl.winfo_exists():
-                            self._msg_lbl.configure(text=p, text_color="#AAAACC")
+                            self._msg_lbl.configure(text=p, text_color="#006080")
                     except Exception:
                         pass
                 self._root.after(0, _apply_partial)
@@ -358,7 +370,7 @@ class HUD:
         preview = content[:80] + ("..." if len(content) > 80 else "")
         self._last_msg = preview
         if self._root:
-            color = "#AAAACC" if role == "assistant" else "#6688BB"
+            color = "#00BFFF" if role == "assistant" else "#FF9500"
             def _apply_msg(p=preview, c=color):
                 try:
                     if self._msg_lbl and self._msg_lbl.winfo_exists():
@@ -401,5 +413,5 @@ class HUD:
         self._jarvis.grok.clear_history()
         if self._root and self._msg_lbl:
             self._root.after(0, lambda: self._msg_lbl.configure(
-                text="Verlauf gelöscht.", text_color="#606078"
+                text="// history cleared", text_color="#004030"
             ))

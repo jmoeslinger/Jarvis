@@ -12,45 +12,63 @@ logger = logging.getLogger("jarvis.chat")
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+# ── Cyberpunk palette (matches HUD / ControlPanel) ────────────────────────────
+_C_BG     = "#030305"
+_C_CARD   = "#060810"
+_C_BORDER = "#0A1828"
+_C_CYAN   = "#00BFFF"
+_C_GREEN  = "#00FF88"
+_C_ORANGE = "#FF9500"
+_C_RED    = "#FF2060"
+_C_TEXT   = "#C8D8F0"
+_C_DIM    = "#0A2030"
+_C_DIMMED = "#1C3040"
+
 _STATUS_COLOR = {
-    State.IDLE:            "#555566",
-    State.WAKE_LISTENING:  "#2266DD",
-    State.CMD_LISTENING:   "#22AA66",
-    State.PROCESSING:      "#CC9900",
-    State.SPEAKING:        "#22AA66",
-    State.ERROR:           "#CC2233",
+    State.IDLE:           _C_DIMMED,
+    State.WAKE_LISTENING: _C_CYAN,
+    State.CMD_LISTENING:  _C_GREEN,
+    State.PROCESSING:     _C_ORANGE,
+    State.SPEAKING:       _C_GREEN,
+    State.ERROR:          _C_RED,
 }
 
 _STATUS_TEXT = {
-    State.IDLE:            "●  Inaktiv",
-    State.WAKE_LISTENING:  "●  Hoert auf Jarvis...",
-    State.CMD_LISTENING:   "●  Nimmt Befehl auf...",
-    State.PROCESSING:      "●  Verarbeitet...",
-    State.SPEAKING:        "●  Spricht...",
-    State.ERROR:           "●  Fehler",
+    State.IDLE:           "◆  STANDBY",
+    State.WAKE_LISTENING: "◆  LISTENING",
+    State.CMD_LISTENING:  "◆  RECORDING",
+    State.PROCESSING:     "◆  THINKING",
+    State.SPEAKING:       "◆  SPEAKING",
+    State.ERROR:          "◆  ERROR",
 }
 
 _ROLE_CONFIG = {
     "user": {
-        "label":       "Sie",
-        "label_color": "#7799CC",
-        "bubble_bg":   "#1A3A6A",
-        "text_color":  "#E8E8F0",
+        "label":       "YOU",
+        "label_color": _C_ORANGE,
+        "bubble_bg":   "#0A1220",
+        "bubble_border": "#0F1E38",
+        "text_color":  _C_TEXT,
         "anchor":      "e",
+        "bar_color":   _C_ORANGE,
     },
     "assistant": {
-        "label":       "Jarvis",
-        "label_color": "#5588EE",
-        "bubble_bg":   "#141428",
-        "text_color":  "#D8D8E8",
+        "label":       "JRV",
+        "label_color": _C_CYAN,
+        "bubble_bg":   "#050A12",
+        "bubble_border": "#0A1828",
+        "text_color":  "#B8D8E8",
         "anchor":      "w",
+        "bar_color":   _C_CYAN,
     },
     "system": {
-        "label":       "System",
-        "label_color": "#445566",
-        "bubble_bg":   "#1A1A22",
-        "text_color":  "#666677",
+        "label":       "SYS",
+        "label_color": _C_DIM,
+        "bubble_bg":   "#030508",
+        "bubble_border": "#080C14",
+        "text_color":  _C_DIM,
         "anchor":      "center",
+        "bar_color":   _C_DIM,
     },
 }
 
@@ -61,47 +79,66 @@ class _MessageBubble(ctk.CTkFrame):
 
         cfg = _ROLE_CONFIG.get(role, _ROLE_CONFIG["system"])
         is_center = cfg["anchor"] == "center"
+        is_right  = cfg["anchor"] == "e"
 
         outer = ctk.CTkFrame(self, fg_color="transparent")
         outer.pack(
             fill="x",
-            padx=12,
-            pady=(3, 1),
-            anchor=cfg["anchor"] if not is_center else "center",
+            padx=10,
+            pady=(2, 1),
+            anchor="center" if is_center else cfg["anchor"],
         )
 
+        # Header row
         header = ctk.CTkFrame(outer, fg_color="transparent")
         header.pack(fill="x")
 
-        ctk.CTkLabel(
+        role_lbl = ctk.CTkLabel(
             header,
             text=cfg["label"],
             text_color=cfg["label_color"],
-            font=ctk.CTkFont(size=11, weight="bold"),
-        ).pack(side="right" if cfg["anchor"] == "e" else "left")
-
-        ctk.CTkLabel(
+            font=ctk.CTkFont(family="Consolas", size=9, weight="bold"),
+        )
+        ts_lbl = ctk.CTkLabel(
             header,
             text=timestamp,
-            text_color="#333344",
-            font=ctk.CTkFont(size=10),
-        ).pack(
-            side="left" if cfg["anchor"] == "e" else "right",
-            padx=6,
+            text_color=_C_DIM,
+            font=ctk.CTkFont(family="Consolas", size=8),
         )
 
-        bubble = ctk.CTkFrame(outer, fg_color=cfg["bubble_bg"], corner_radius=14)
-        bubble.pack(anchor=cfg["anchor"], pady=(2, 0))
+        if is_right:
+            ts_lbl.pack(side="left")
+            role_lbl.pack(side="right")
+        else:
+            role_lbl.pack(side="left")
+            ts_lbl.pack(side="left", padx=(6, 0))
+
+        # Accent bar (thin colored line left/right of bubble)
+        bubble_wrapper = ctk.CTkFrame(outer, fg_color="transparent")
+        bubble_wrapper.pack(anchor=cfg["anchor"], pady=(2, 0))
+
+        if not is_center:
+            bar = ctk.CTkFrame(bubble_wrapper, width=2, corner_radius=0,
+                               fg_color=cfg["bar_color"])
+            bar.pack(side="right" if is_right else "left", fill="y")
+
+        bubble = ctk.CTkFrame(bubble_wrapper,
+                              fg_color=cfg["bubble_bg"],
+                              border_width=1,
+                              border_color=cfg["bubble_border"],
+                              corner_radius=6)
+        bubble.pack(side="right" if is_right else "left",
+                    padx=(0 if is_right else 4, 4 if is_right else 0))
 
         self._content_label = ctk.CTkLabel(
             bubble,
             text=content,
-            wraplength=420,
+            wraplength=380,
             justify="left",
             text_color=cfg["text_color"],
-            font=ctk.CTkFont(size=13),
-            padx=14,
-            pady=10,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            padx=12,
+            pady=8,
         )
         self._content_label.pack()
 
@@ -114,8 +151,8 @@ class ChatWindow:
         self._status_lbl: Optional[ctk.CTkLabel] = None
         self._input: Optional[ctk.CTkEntry] = None
         self._ready = threading.Event()
-        self._partial_bubble: Optional[_MessageBubble] = None   # aktuelle Streaming-Bubble
-        self._partial_label:  Optional[ctk.CTkLabel] = None     # Label darin zum Updaten
+        self._partial_bubble: Optional[_MessageBubble] = None
+        self._partial_label:  Optional[ctk.CTkLabel] = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -124,9 +161,9 @@ class ChatWindow:
     def run(self):
         self._root = ctk.CTk()
         self._root.title("Jarvis")
-        self._root.geometry("580x740")
+        self._root.geometry("560x720")
         self._root.minsize(400, 480)
-        self._root.configure(fg_color="#06060E")
+        self._root.configure(fg_color=_C_BG)
 
         self._build_ui()
         self._register_callbacks()
@@ -164,74 +201,93 @@ class ChatWindow:
     # ------------------------------------------------------------------
 
     def _build_ui(self):
+        # ── Top accent line ───────────────────────────────────────────
+        ctk.CTkFrame(self._root, height=2, corner_radius=0,
+                     fg_color=_C_CYAN).pack(fill="x")
+
         # ── Header ───────────────────────────────────────────────────
-        header = ctk.CTkFrame(self._root, height=56, fg_color="#0A0A18", corner_radius=0)
+        header = ctk.CTkFrame(self._root, height=48, fg_color=_C_CARD,
+                              corner_radius=0)
         header.pack(fill="x")
         header.pack_propagate(False)
 
         ctk.CTkLabel(
             header,
-            text=" J A R V I S",
-            font=ctk.CTkFont(family="Segoe UI", size=17, weight="bold"),
-            text_color="#2B5FD9",
-        ).pack(side="left", padx=18, pady=10)
+            text="JRV//CHAT",
+            font=ctk.CTkFont(family="Consolas", size=14, weight="bold"),
+            text_color=_C_CYAN,
+        ).pack(side="left", padx=14, pady=10)
 
         self._status_lbl = ctk.CTkLabel(
             header,
-            text="●  Hört auf Jarvis...",
-            font=ctk.CTkFont(size=11),
-            text_color="#1A4AAA",
+            text="◆  LISTENING",
+            font=ctk.CTkFont(family="Consolas", size=9),
+            text_color=_C_DIM,
         )
-        self._status_lbl.pack(side="right", padx=18)
+        self._status_lbl.pack(side="right", padx=14)
 
         # Divider
-        ctk.CTkFrame(self._root, height=1, fg_color="#121222", corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(self._root, height=1, fg_color=_C_BORDER,
+                     corner_radius=0).pack(fill="x")
 
-        # ── Chat-Bereich ──────────────────────────────────────────────
+        # ── Chat area ────────────────────────────────────────────────
         self._scroll = ctk.CTkScrollableFrame(
             self._root,
-            fg_color="#06060E",
-            scrollbar_button_color="#181830",
-            scrollbar_button_hover_color="#222244",
+            fg_color=_C_BG,
+            scrollbar_button_color=_C_BORDER,
+            scrollbar_button_hover_color=_C_DIMMED,
             corner_radius=0,
         )
         self._scroll.pack(fill="both", expand=True)
 
         # Divider
-        ctk.CTkFrame(self._root, height=1, fg_color="#121222", corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(self._root, height=1, fg_color=_C_BORDER,
+                     corner_radius=0).pack(fill="x")
 
-        # ── Eingabe ───────────────────────────────────────────────────
-        bar = ctk.CTkFrame(self._root, height=64, fg_color="#0A0A18", corner_radius=0)
+        # ── Input bar ────────────────────────────────────────────────
+        bar = ctk.CTkFrame(self._root, height=56, fg_color=_C_CARD,
+                           corner_radius=0)
         bar.pack(fill="x")
         bar.pack_propagate(False)
 
+        # Prompt indicator
+        ctk.CTkLabel(
+            bar,
+            text=">",
+            font=ctk.CTkFont(family="Consolas", size=13, weight="bold"),
+            text_color=_C_CYAN,
+        ).pack(side="left", padx=(14, 0))
+
         self._input = ctk.CTkEntry(
             bar,
-            placeholder_text="Nachricht eingeben...",
-            height=40,
-            font=ctk.CTkFont(size=12),
-            fg_color="#0E0E20",
-            border_color="#1A1A38",
+            placeholder_text="enter command...",
+            height=34,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            fg_color=_C_BG,
+            border_color=_C_BORDER,
             border_width=1,
-            text_color="#D0D0E8",
-            placeholder_text_color="#30304A",
-            corner_radius=8,
+            text_color=_C_TEXT,
+            placeholder_text_color=_C_DIM,
+            corner_radius=3,
         )
-        self._input.pack(side="left", fill="x", expand=True, padx=(14, 8), pady=12)
+        self._input.pack(side="left", fill="x", expand=True, padx=(6, 6), pady=11)
         self._input.bind("<Return>", self._on_send)
 
         send_btn = ctk.CTkButton(
             bar,
-            text="↑",
-            width=40,
-            height=40,
-            font=ctk.CTkFont(size=16, weight="bold"),
-            fg_color="#0F2A6A",
-            hover_color="#1A3A8A",
-            corner_radius=8,
+            text="▶",
+            width=34,
+            height=34,
+            font=ctk.CTkFont(family="Consolas", size=12, weight="bold"),
+            fg_color=_C_BG,
+            hover_color="#001A28",
+            border_width=1,
+            border_color=_C_CYAN,
+            text_color=_C_CYAN,
+            corner_radius=3,
             command=self._on_send,
         )
-        send_btn.pack(side="right", padx=(0, 14), pady=12)
+        send_btn.pack(side="right", padx=(0, 14), pady=11)
 
     # ------------------------------------------------------------------
     # Callbacks
@@ -244,8 +300,8 @@ class ChatWindow:
     def _on_state(self, state: State):
         if not self.is_alive() or not self._status_lbl:
             return
-        color = _STATUS_COLOR.get(state, "#555566")
-        text  = _STATUS_TEXT.get(state, "Jarvis")
+        color = _STATUS_COLOR.get(state, _C_DIMMED)
+        text  = _STATUS_TEXT.get(state, "◆  JARVIS")
         def _apply(t=text, c=color):
             try:
                 if self._status_lbl and self._status_lbl.winfo_exists():
@@ -261,18 +317,15 @@ class ChatWindow:
 
     def _handle_message(self, role: str, content: str):
         """Wird im Tkinter-Haupt-Thread ausgeführt."""
-        # Interne Rollen die nicht im Chat angezeigt werden sollen
         if role in ("confidence",):
             return
 
         try:
             if role == "assistant_partial":
-                # Streaming: letzte Bubble aktualisieren statt neue zu erstellen
                 if self._partial_label and self._partial_label.winfo_exists():
                     preview = content[:400] + ("..." if len(content) > 400 else "")
                     self._partial_label.configure(text=preview)
                 else:
-                    # Erste Partial-Nachricht → neue Bubble anlegen
                     self._partial_bubble, self._partial_label = self._add_bubble(
                         "assistant", content[:400], streaming=True
                     )
@@ -280,11 +333,10 @@ class ChatWindow:
                 return
 
             if role == "assistant":
-                # Finale Antwort: Partial-Bubble updaten oder neue anlegen
                 if self._partial_label and self._partial_label.winfo_exists():
                     self._partial_label.configure(text=content)
-                    self._partial_bubble  = None
-                    self._partial_label   = None
+                    self._partial_bubble = None
+                    self._partial_label  = None
                 else:
                     self._partial_bubble = None
                     self._partial_label  = None
@@ -292,21 +344,19 @@ class ChatWindow:
                 self._scroll_to_bottom()
                 return
 
-            # user / system: Streaming-Bubble abschließen, neue anlegen
             self._partial_bubble = None
             self._partial_label  = None
             self._add_bubble(role, content)
             self._scroll_to_bottom()
         except Exception as e:
-            logger.debug(f"_handle_message Fehler (Fenster ggf. geschlossen): {e}")
+            logger.debug(f"_handle_message error: {e}")
 
     def _add_bubble(self, role: str, content: str, streaming: bool = False):
-        """Erstellt eine neue Nachrichtenblase. Gibt (bubble, label) zurück wenn streaming=True."""
+        """Erstellt eine neue Nachrichtenblase."""
         ts = datetime.now().strftime("%H:%M")
         bubble = _MessageBubble(self._scroll, role=role, content=content, timestamp=ts)
         bubble.pack(fill="x", pady=2)
         if streaming:
-            # Gibt das Label zurück damit es direkt aktualisiert werden kann
             return bubble, bubble._content_label
         return bubble, None
 
@@ -327,8 +377,6 @@ class ChatWindow:
         self._jarvis.send_text_command(text)
 
     def _on_close(self):
-        # destroy() beendet die mainloop → Thread kann neu gestartet werden
-        # withdraw() würde den Thread am Leben lassen und erneutes Öffnen verhindern
         try:
             self._root.destroy()
         except Exception:
