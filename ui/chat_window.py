@@ -21,8 +21,8 @@ _C_GREEN  = "#00FF88"
 _C_ORANGE = "#FF9500"
 _C_RED    = "#FF2060"
 _C_TEXT   = "#C8D8F0"
-_C_DIM    = "#0A2030"
-_C_DIMMED = "#1C3040"
+_C_DIM    = "#1A3A50"
+_C_DIMMED = "#3A7090"
 
 _STATUS_COLOR = {
     State.IDLE:           _C_DIMMED,

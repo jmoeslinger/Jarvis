@@ -26,14 +26,14 @@ _C_ORANGE  = "#FF9500"   # warm / processing
 _C_PURPLE  = "#8844FF"   # creative / personality
 _C_RED     = "#FF2060"   # error / stop
 _C_TEXT    = "#C8D8F0"   # primary text
-_C_DIM     = "#0A2030"   # dim / placeholder text
-_C_DIMMED  = "#1C3040"   # slightly brighter dim
+_C_DIM     = "#1A3A50"   # dim / placeholder text (section labels, hints)
+_C_DIMMED  = "#3A7090"   # inactive button text — readable but muted
 
 # ── Button presets ────────────────────────────────────────────────────────────
 def _btn_inactive():
     return dict(fg_color=_C_BG, hover_color="#060E1A",
-                border_width=1, border_color=_C_BORDER,
-                text_color=_C_DIM)
+                border_width=1, border_color="#0F2030",
+                text_color=_C_DIMMED)
 
 def _btn_active(accent: str, bg: str):
     return dict(fg_color=bg, hover_color=bg,
@@ -289,7 +289,7 @@ class ControlPanel:
 
         ctk.CTkLabel(prov_inner, text="// AI PROVIDER",
             font=ctk.CTkFont(family="Consolas", size=8),
-            text_color=_C_DIM,
+            text_color=_C_DIMMED,
         ).pack(anchor="w")
 
         self._lbl_provider = ctk.CTkLabel(prov_inner,
@@ -326,7 +326,7 @@ class ControlPanel:
         lenf_inner.pack(fill="x", padx=10, pady=(5, 7))
 
         ctk.CTkLabel(lenf_inner, text="// RESPONSE LENGTH",
-            font=ctk.CTkFont(family="Consolas", size=8), text_color=_C_DIM,
+            font=ctk.CTkFont(family="Consolas", size=8), text_color=_C_DIMMED,
         ).pack(anchor="w", pady=(0, 4))
 
         len_f = ctk.CTkFrame(lenf_inner, fg_color="transparent")
@@ -637,8 +637,8 @@ class ControlPanel:
         ctk.CTkButton(
             task_bot, text="STOP",
             fg_color=_C_BG, hover_color="#1A0010",
-            border_width=1, border_color="#3A1020",
-            text_color="#3A1020",
+            border_width=1, border_color="#4A1020",
+            text_color="#AA3040",
             font=ctk.CTkFont(family="Consolas", size=9),
             height=20, corner_radius=3,
             command=self._act_cancel_task,
@@ -699,7 +699,7 @@ class ControlPanel:
             footer, text="■  SHUTDOWN",
             fg_color=_C_BG, hover_color="#1A0010",
             border_width=1, border_color="#3A1020",
-            text_color="#3A1020", hover_color="#1A0010",
+            text_color="#3A1020",
             font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
             height=32, corner_radius=3,
             command=self._act_quit,
@@ -723,11 +723,11 @@ class ControlPanel:
             kw = _ACTIVE_CYAN()
         elif danger:
             kw = dict(fg_color=_C_BG, hover_color="#1A0010",
-                      border_width=1, border_color="#3A1020",
-                      text_color="#3A1020")
+                      border_width=1, border_color="#4A1020",
+                      text_color="#AA3040")
         else:
             kw = dict(fg_color=_C_BG, hover_color="#060E1A",
-                      border_width=1, border_color=_C_BORDER,
+                      border_width=1, border_color="#0F2030",
                       text_color=_C_DIMMED)
         ctk.CTkButton(parent, text=text, **kw,
             font=ctk.CTkFont(family="Consolas", size=9),
