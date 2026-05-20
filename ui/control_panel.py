@@ -155,7 +155,7 @@ class ControlPanel:
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Sichere Startposition nahe oben-links (vermeidet DPI-Probleme)
-        w, h = 320, 620
+        w, h = 310, 640
         self._win.geometry(f"{w}x{h}+100+100")
 
         self._build_ui()
@@ -219,47 +219,48 @@ class ControlPanel:
 
     def _build_ui(self):
         win = self._win
-        win.configure(fg_color="#0f172a")
+        win.configure(fg_color="#080C14")
 
         # Header
-        header = ctk.CTkFrame(win, fg_color="#1e293b", corner_radius=0, height=56)
+        header = ctk.CTkFrame(win, fg_color="#0D1220", corner_radius=0, height=52)
         header.pack(fill="x")
         header.pack_propagate(False)
 
         ctk.CTkLabel(
             header, text="⚡  JARVIS",
-            font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
-            text_color="#f1f5f9",
-        ).place(x=16, rely=0.5, anchor="w")
+            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"),
+            text_color="#E8EDF8",
+        ).place(x=14, rely=0.5, anchor="w")
 
         sf = ctk.CTkFrame(header, fg_color="transparent")
-        sf.place(relx=1.0, x=-14, rely=0.5, anchor="e")
+        sf.place(relx=1.0, x=-12, rely=0.5, anchor="e")
 
         self._dot_state = ctk.CTkLabel(sf, text="●",
-            font=ctk.CTkFont(size=11), text_color="#22c55e")
+            font=ctk.CTkFont(size=10), text_color="#1DB954")
         self._dot_state.pack(side="left")
 
         self._lbl_state = ctk.CTkLabel(sf, text="Hört zu",
-            font=ctk.CTkFont(family="Segoe UI", size=11), text_color="#94a3b8")
-        self._lbl_state.pack(side="left", padx=(4, 0))
+            font=ctk.CTkFont(family="Segoe UI", size=10), text_color="#64748b")
+        self._lbl_state.pack(side="left", padx=(3, 0))
 
         # KI-Provider
-        prov = ctk.CTkFrame(win, fg_color="#1e293b", corner_radius=10)
-        prov.pack(fill="x", padx=12, pady=(10, 0))
+        prov = ctk.CTkFrame(win, fg_color="#0D1525", corner_radius=8,
+                            border_width=1, border_color="#1A2540")
+        prov.pack(fill="x", padx=10, pady=(10, 0))
 
-        ctk.CTkLabel(prov, text="🤖  KI-Provider",
-            font=ctk.CTkFont(size=10, weight="bold"), text_color="#475569",
-        ).pack(anchor="w", padx=12, pady=(8, 0))
+        ctk.CTkLabel(prov, text="KI-PROVIDER",
+            font=ctk.CTkFont(size=9, weight="bold"), text_color="#2A3A5A",
+        ).pack(anchor="w", padx=10, pady=(7, 0))
 
         self._lbl_provider = ctk.CTkLabel(prov,
             text=self._jarvis.grok.active_name,
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color="#60a5fa",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#4A90D9",
         )
-        self._lbl_provider.pack(anchor="w", padx=12, pady=(2, 0))
+        self._lbl_provider.pack(anchor="w", padx=10, pady=(1, 0))
 
         mode_f = ctk.CTkFrame(prov, fg_color="transparent")
-        mode_f.pack(fill="x", padx=10, pady=(6, 10))
+        mode_f.pack(fill="x", padx=8, pady=(5, 8))
         mode_f.columnconfigure((0, 1, 2), weight=1, uniform="mode")
 
         current = getattr(self._jarvis.grok, "_mode", "auto")
@@ -268,24 +269,25 @@ class ControlPanel:
         for col, (label, value) in enumerate(_MODE_LABELS_SHORT):
             btn = ctk.CTkButton(
                 mode_f, text=label,
-                fg_color="#2563eb" if current == value else "#334155",
-                hover_color="#2563eb", text_color="#e2e8f0",
-                font=ctk.CTkFont(size=11), height=28, corner_radius=6,
+                fg_color="#1A3A7A" if current == value else "#111825",
+                hover_color="#1A3A7A", text_color="#C8D8F0",
+                font=ctk.CTkFont(size=10), height=26, corner_radius=5,
                 command=lambda v=value: self._set_mode(v),
             )
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._mode_btns[value] = btn
 
         # ── Antwortlänge ──────────────────────────────────────────────────────────
-        lenf_outer = ctk.CTkFrame(win, fg_color="#1e293b", corner_radius=10)
-        lenf_outer.pack(fill="x", padx=12, pady=(8, 0))
+        lenf_outer = ctk.CTkFrame(win, fg_color="#0D1525", corner_radius=8,
+                                  border_width=1, border_color="#1A2540")
+        lenf_outer.pack(fill="x", padx=10, pady=(7, 0))
 
-        ctk.CTkLabel(lenf_outer, text="📏  Antwortlänge",
-            font=ctk.CTkFont(size=10, weight="bold"), text_color="#475569",
-        ).pack(anchor="w", padx=12, pady=(8, 4))
+        ctk.CTkLabel(lenf_outer, text="ANTWORTLÄNGE",
+            font=ctk.CTkFont(size=9, weight="bold"), text_color="#2A3A5A",
+        ).pack(anchor="w", padx=10, pady=(7, 3))
 
         len_f = ctk.CTkFrame(lenf_outer, fg_color="transparent")
-        len_f.pack(fill="x", padx=10, pady=(0, 10))
+        len_f.pack(fill="x", padx=8, pady=(0, 8))
         len_f.columnconfigure((0, 1, 2), weight=1, uniform="len")
 
         _LEN_MODES = [("Kurz", "short"), ("Normal", "normal"), ("Detail", "detailed")]
@@ -294,19 +296,19 @@ class ControlPanel:
         for col, (lbl, val) in enumerate(_LEN_MODES):
             btn = ctk.CTkButton(
                 len_f, text=lbl,
-                fg_color="#0f766e" if cur_len == val else "#334155",
-                hover_color="#0f766e", text_color="#e2e8f0",
-                font=ctk.CTkFont(size=11), height=28, corner_radius=6,
+                fg_color="#0A4A44" if cur_len == val else "#111825",
+                hover_color="#0A4A44", text_color="#C8D8F0",
+                font=ctk.CTkFont(size=10), height=26, corner_radius=5,
                 command=lambda v=val: self._set_length(v),
             )
             btn.grid(row=0, column=col, padx=2, sticky="ew")
             self._len_btns[val] = btn
 
         # ── Buttons — scrollbarer Bereich ─────────────────────────────────────
-        body = ctk.CTkScrollableFrame(win, fg_color="#0f172a", corner_radius=0,
-                                      scrollbar_button_color="#334155",
-                                      scrollbar_button_hover_color="#475569")
-        body.pack(fill="both", expand=True, padx=12, pady=(10, 0))
+        body = ctk.CTkScrollableFrame(win, fg_color="#080C14", corner_radius=0,
+                                      scrollbar_button_color="#1A2540",
+                                      scrollbar_button_hover_color="#253560")
+        body.pack(fill="both", expand=True, padx=10, pady=(8, 0))
 
         # ── TON ───────────────────────────────────────────────────────────────────
         self._section(body, "TON")
@@ -327,9 +329,9 @@ class ControlPanel:
         for col, (lbl, val) in enumerate(_TONE_MODES[:3]):
             btn = ctk.CTkButton(
                 tone_row1, text=lbl,
-                fg_color="#7c3aed" if cur_tone == val else "#334155",
-                hover_color="#7c3aed", text_color="#e2e8f0",
-                font=ctk.CTkFont(size=11), height=28, corner_radius=6,
+                fg_color="#3A1A7A" if cur_tone == val else "#111825",
+                hover_color="#3A1A7A", text_color="#C8D8F0",
+                font=ctk.CTkFont(size=10), height=26, corner_radius=5,
                 command=lambda v=val: self._set_tone(v),
             )
             btn.grid(row=0, column=col, padx=2, sticky="ew")
@@ -342,9 +344,9 @@ class ControlPanel:
         for col, (lbl, val) in enumerate(_TONE_MODES[3:]):
             btn = ctk.CTkButton(
                 tone_row2, text=lbl,
-                fg_color="#7c3aed" if cur_tone == val else "#334155",
-                hover_color="#7c3aed", text_color="#e2e8f0",
-                font=ctk.CTkFont(size=11), height=28, corner_radius=6,
+                fg_color="#3A1A7A" if cur_tone == val else "#111825",
+                hover_color="#3A1A7A", text_color="#C8D8F0",
+                font=ctk.CTkFont(size=10), height=26, corner_radius=5,
                 command=lambda v=val: self._set_tone(v),
             )
             btn.grid(row=0, column=col, padx=2, sticky="ew")
@@ -655,30 +657,38 @@ class ControlPanel:
         self._btn(body, "⚙️   Einstellungen",    self._act_settings)
 
         # Beenden
-        footer = ctk.CTkFrame(win, fg_color="#0f172a", corner_radius=0)
-        footer.pack(fill="x", side="bottom", padx=12, pady=(4, 12))
+        footer = ctk.CTkFrame(win, fg_color="#080C14", corner_radius=0)
+        footer.pack(fill="x", side="bottom", padx=10, pady=(4, 10))
         ctk.CTkButton(
             footer, text="⏹   Beenden",
-            fg_color="#450a0a", hover_color="#dc2626",
-            text_color="#fca5a5",
-            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            height=40, corner_radius=8,
+            fg_color="#1A0808", hover_color="#7A1010",
+            text_color="#BB5555",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            height=36, corner_radius=7,
+            border_width=1, border_color="#3A1010",
             command=self._act_quit,
         ).pack(fill="x")
 
     def _section(self, parent, title):
-        ctk.CTkLabel(parent, text=title,
-            font=ctk.CTkFont(size=9, weight="bold"),
-            text_color="#334155", anchor="w",
-        ).pack(fill="x", padx=2, pady=(12, 2))
+        row = ctk.CTkFrame(parent, fg_color="transparent", height=24)
+        row.pack(fill="x", padx=0, pady=(10, 2))
+        row.pack_propagate(False)
+        ctk.CTkFrame(row, height=1, fg_color="#141E30", corner_radius=0
+        ).place(relx=0, rely=0.5, relwidth=1.0, anchor="w")
+        ctk.CTkLabel(row, text=f" {title} ",
+            font=ctk.CTkFont(size=8, weight="bold"),
+            text_color="#253550", fg_color="#080C14", anchor="w",
+        ).place(x=4, rely=0.5, anchor="w")
 
     def _btn(self, parent, text, cmd, primary=False):
         ctk.CTkButton(parent, text=text,
-            fg_color="#1e3a5f" if primary else "#1e293b",
-            hover_color="#2563eb" if primary else "#334155",
-            text_color="#e2e8f0",
-            font=ctk.CTkFont(family="Segoe UI", size=13),
-            height=40, corner_radius=8, anchor="w",
+            fg_color="#0F2040" if primary else "#0D1525",
+            hover_color="#1A3A7A" if primary else "#141E30",
+            text_color="#C8D8F0",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=36, corner_radius=7, anchor="w",
+            border_width=1,
+            border_color="#1A2540" if not primary else "#1A3A7A",
             command=cmd,
         ).pack(fill="x", pady=2)
 
@@ -1284,7 +1294,7 @@ class ControlPanel:
             return
         current = getattr(self._jarvis.grok, "_mode", "auto")
         for val, btn in self._mode_btns.items():
-            btn.configure(fg_color="#2563eb" if val == current else "#334155")
+            btn.configure(fg_color="#1A3A7A" if val == current else "#111825")
 
     def _refresh_length_buttons(self):
         """Aktualisiert die Antwortlaenge-Buttons anhand der Settings."""
@@ -1292,7 +1302,7 @@ class ControlPanel:
             return
         cur = getattr(self._jarvis.settings, "response_length", "normal")
         for val, btn in self._len_btns.items():
-            btn.configure(fg_color="#0f766e" if val == cur else "#334155")
+            btn.configure(fg_color="#0A4A44" if val == cur else "#111825")
 
     def _refresh_tone_buttons(self):
         """Aktualisiert die Ton/Stil-Buttons anhand der Settings."""
@@ -1300,7 +1310,7 @@ class ControlPanel:
             return
         cur = getattr(self._jarvis.settings, "response_tone", "normal")
         for val, btn in self._tone_btns.items():
-            btn.configure(fg_color="#7c3aed" if val == cur else "#334155")
+            btn.configure(fg_color="#3A1A7A" if val == cur else "#111825")
 
     def _refresh_toggle_buttons(self):
         """Aktualisiert die KI-Modus-Toggles (Multi-Step / Planung / Parallel)."""

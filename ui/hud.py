@@ -32,8 +32,8 @@ _STATE_LABEL = {
 
 _PULSE_STATES = {State.WAKE_LISTENING, State.CMD_LISTENING, State.PROCESSING, State.SPEAKING}
 
-_HUD_W = 330
-_HUD_H = 120
+_HUD_W = 258
+_HUD_H  = 74
 
 
 class HUD:
@@ -72,8 +72,8 @@ class HUD:
         self._root.geometry(f"{_HUD_W}x{_HUD_H}+80+80")
         self._root.overrideredirect(True)           # kein Titelbalken
         self._root.attributes("-topmost", True)     # immer im Vordergrund
-        self._root.attributes("-alpha", 0.93)
-        self._root.configure(fg_color="#0A0A16")
+        self._root.attributes("-alpha", 0.95)
+        self._root.configure(fg_color="#07070F")
 
         self._build_ui()
         self._register_callbacks()
@@ -87,7 +87,8 @@ class HUD:
         if self._root and self._msg_lbl and not self._last_msg:
             hotkey = self._jarvis.settings.activation_hotkey.upper()
             self._root.after(0, lambda: self._msg_lbl.configure(
-                text=f"Drücke  {hotkey}  oder sag 'Hey Jarvis'..."
+                text=f"{hotkey}  ·  Hey Jarvis...",
+                text_color="#333355",
             ))
 
     def set_open_panel_callback(self, cb):
@@ -118,168 +119,119 @@ class HUD:
         # ── Äußerer Rahmen ────────────────────────────────────────────
         outer = ctk.CTkFrame(
             self._root,
-            fg_color="#0D0D20",
-            corner_radius=14,
+            fg_color="#0B0B1A",
+            corner_radius=12,
             border_width=1,
-            border_color="#1E1E3A",
+            border_color="#1C1C38",
         )
         outer.pack(fill="both", expand=True, padx=1, pady=1)
 
-        # Drag-Handling
+        # Drag-Handling (auf gesamten Rahmen)
         outer.bind("<ButtonPress-1>",   self._drag_start)
         outer.bind("<B1-Motion>",       self._drag_move)
 
-        # ── Obere Zeile: Dot + Status + Net + Buttons ─────────────────
+        # ── Obere Zeile: Dot + JARVIS + State + Net + Buttons ────────
         top = ctk.CTkFrame(outer, fg_color="transparent")
-        top.pack(fill="x", padx=12, pady=(10, 4))
+        top.pack(fill="x", padx=10, pady=(8, 3))
 
         self._dot_lbl = ctk.CTkLabel(
             top,
             text="●",
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(size=11),
             text_color=_STATE_COLOR[self._state],
-            width=18,
+            width=14,
         )
         self._dot_lbl.pack(side="left")
 
         ctk.CTkLabel(
             top,
             text="JARVIS",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color="#3366FF",
-        ).pack(side="left", padx=(6, 0))
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#2B5FD9",
+        ).pack(side="left", padx=(5, 0))
 
         self._state_lbl = ctk.CTkLabel(
             top,
             text=_STATE_LABEL[self._state],
-            font=ctk.CTkFont(size=12),
-            text_color="#888899",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color="#606078",
         )
-        self._state_lbl.pack(side="left", padx=(10, 0))
+        self._state_lbl.pack(side="left", padx=(8, 0))
 
         # Internet-Status-Punkt
         self._net_dot = ctk.CTkLabel(
             top,
             text="●",
-            font=ctk.CTkFont(size=9),
-            text_color="#22AA55",
-            width=14,
+            font=ctk.CTkFont(size=7),
+            text_color="#1A9944",
+            width=12,
         )
-        self._net_dot.pack(side="left", padx=(8, 0))
+        self._net_dot.pack(side="left", padx=(6, 0))
 
-        # Close-Button
-        close_btn = ctk.CTkButton(
-            top,
-            text="✕",
-            width=24,
-            height=24,
-            font=ctk.CTkFont(size=11),
-            fg_color="#1A1A30",
-            hover_color="#331122",
-            text_color="#665566",
-            corner_radius=6,
+        # ── Buttons (rechts, kompakt) ─────────────────────────────────
+        _ibtn = dict(height=20, corner_radius=5,
+                     fg_color="#12122A", hover_color="#1E1E40")
+
+        # Close
+        ctk.CTkButton(
+            top, text="✕", width=20,
+            font=ctk.CTkFont(size=10),
+            text_color="#554455",
+            hover_color="#2A0A18",
+            fg_color="#12122A",
+            corner_radius=5,
             command=self.hide,
-        )
-        close_btn.pack(side="right", padx=(4, 0))
+        ).pack(side="right", padx=(3, 0))
 
-        # Panel-Button (⚙)
-        panel_btn = ctk.CTkButton(
-            top,
-            text="⚙",
-            width=28,
-            height=24,
-            font=ctk.CTkFont(size=13),
-            fg_color="#1A1A30",
-            hover_color="#222244",
-            corner_radius=6,
+        # Panel ⚙
+        ctk.CTkButton(
+            top, text="⚙", width=22,
+            font=ctk.CTkFont(size=11),
+            text_color="#5577BB",
+            **_ibtn,
             command=self._on_panel_click,
-        )
-        panel_btn.pack(side="right", padx=(4, 0))
+        ).pack(side="right", padx=(3, 0))
 
-        # Mikrofon-Button
-        mic_btn = ctk.CTkButton(
-            top,
-            text="🎤",
-            width=28,
-            height=24,
-            font=ctk.CTkFont(size=12),
-            fg_color="#1A1A30",
-            hover_color="#222244",
-            corner_radius=6,
+        # Mikrofon 🎤
+        ctk.CTkButton(
+            top, text="🎤", width=22,
+            font=ctk.CTkFont(size=10),
+            text_color="#7799CC",
+            **_ibtn,
             command=self._on_mic_click,
-        )
-        mic_btn.pack(side="right", padx=(4, 0))
+        ).pack(side="right", padx=(3, 0))
 
-        # Stop-Button (■)
+        # Stop ■
         self._stop_btn = ctk.CTkButton(
-            top,
-            text="■",
-            width=28,
-            height=24,
-            font=ctk.CTkFont(size=12),
-            fg_color="#1A1A30",
-            hover_color="#441122",
-            text_color="#664444",
-            corner_radius=6,
+            top, text="■", width=22,
+            font=ctk.CTkFont(size=10),
+            text_color="#553333",
+            hover_color="#2A0A0A",
+            fg_color="#12122A",
+            corner_radius=5,
             command=self._on_stop_click,
         )
-        self._stop_btn.pack(side="right", padx=(4, 0))
+        self._stop_btn.pack(side="right", padx=(3, 0))
 
         # ── Trennlinie ────────────────────────────────────────────────
-        ctk.CTkFrame(outer, height=1, fg_color="#1A1A30", corner_radius=0).pack(
-            fill="x", padx=10
+        ctk.CTkFrame(outer, height=1, fg_color="#161630", corner_radius=0).pack(
+            fill="x", padx=8
         )
 
-        # ── Mittlere Zeile: letzte Nachricht ──────────────────────────
+        # ── Nachrichtenzeile ──────────────────────────────────────────
         hotkey = self._jarvis.settings.activation_hotkey.upper()
         self._msg_lbl = ctk.CTkLabel(
             outer,
-            text=f"Drücke  {hotkey}  oder sag 'Hey Jarvis'...",
-            font=ctk.CTkFont(size=11),
-            text_color="#444466",
-            wraplength=_HUD_W - 28,
+            text=f"{hotkey}  ·  Hey Jarvis...",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color="#333355",
+            wraplength=_HUD_W - 22,
             justify="left",
             anchor="w",
         )
-        self._msg_lbl.pack(fill="x", padx=14, pady=(5, 4), anchor="w")
+        self._msg_lbl.pack(fill="x", padx=12, pady=(4, 7), anchor="w")
         self._msg_lbl.bind("<ButtonPress-1>",  self._drag_start)
         self._msg_lbl.bind("<B1-Motion>",      self._drag_move)
-
-        # ── Quick-Command Buttons ──────────────────────────────────────
-        quick_row = ctk.CTkFrame(outer, fg_color="transparent")
-        quick_row.pack(fill="x", padx=10, pady=(0, 8))
-
-        _btn_cfg = dict(
-            height=22,
-            font=ctk.CTkFont(size=10),
-            fg_color="#111128",
-            hover_color="#1A1A38",
-            corner_radius=6,
-        )
-
-        ctk.CTkButton(
-            quick_row,
-            text="🛑 Stop",
-            width=72,
-            command=self._on_stop_click,
-            **_btn_cfg,
-        ).pack(side="left", padx=(0, 4))
-
-        ctk.CTkButton(
-            quick_row,
-            text="🔁 Wiederholen",
-            width=100,
-            command=self._on_repeat_click,
-            **_btn_cfg,
-        ).pack(side="left", padx=(0, 4))
-
-        ctk.CTkButton(
-            quick_row,
-            text="🗑 Verlauf",
-            width=80,
-            command=self._on_clear_history_click,
-            **_btn_cfg,
-        ).pack(side="left")
 
     # ------------------------------------------------------------------
     # Drag-Logik
@@ -331,7 +283,7 @@ class HUD:
         r = int(hex_color[1:3], 16)
         g = int(hex_color[3:5], 16)
         b = int(hex_color[5:7], 16)
-        bg_r, bg_g, bg_b = 13, 13, 32
+        bg_r, bg_g, bg_b = 11, 11, 26
         r = int(r * alpha + bg_r * (1 - alpha))
         g = int(g * alpha + bg_g * (1 - alpha))
         b = int(b * alpha + bg_b * (1 - alpha))
@@ -449,5 +401,5 @@ class HUD:
         self._jarvis.grok.clear_history()
         if self._root and self._msg_lbl:
             self._root.after(0, lambda: self._msg_lbl.configure(
-                text="Verlauf gelöscht.", text_color="#888899"
+                text="Verlauf gelöscht.", text_color="#606078"
             ))

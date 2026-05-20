@@ -124,9 +124,9 @@ class ChatWindow:
     def run(self):
         self._root = ctk.CTk()
         self._root.title("Jarvis")
-        self._root.geometry("620x780")
-        self._root.minsize(420, 500)
-        self._root.configure(fg_color="#08080F")
+        self._root.geometry("580x740")
+        self._root.minsize(400, 480)
+        self._root.configure(fg_color="#06060E")
 
         self._build_ui()
         self._register_callbacks()
@@ -165,73 +165,73 @@ class ChatWindow:
 
     def _build_ui(self):
         # ── Header ───────────────────────────────────────────────────
-        header = ctk.CTkFrame(self._root, height=64, fg_color="#0C0C1A", corner_radius=0)
+        header = ctk.CTkFrame(self._root, height=56, fg_color="#0A0A18", corner_radius=0)
         header.pack(fill="x")
         header.pack_propagate(False)
 
         ctk.CTkLabel(
             header,
             text=" J A R V I S",
-            font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
-            text_color="#3366FF",
-        ).pack(side="left", padx=22, pady=14)
+            font=ctk.CTkFont(family="Segoe UI", size=17, weight="bold"),
+            text_color="#2B5FD9",
+        ).pack(side="left", padx=18, pady=10)
 
         self._status_lbl = ctk.CTkLabel(
             header,
-            text="●  Hoert auf Jarvis...",
-            font=ctk.CTkFont(size=12),
-            text_color="#2266DD",
+            text="●  Hört auf Jarvis...",
+            font=ctk.CTkFont(size=11),
+            text_color="#1A4AAA",
         )
-        self._status_lbl.pack(side="right", padx=22)
+        self._status_lbl.pack(side="right", padx=18)
 
         # Divider
-        ctk.CTkFrame(self._root, height=1, fg_color="#18182A", corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(self._root, height=1, fg_color="#121222", corner_radius=0).pack(fill="x")
 
         # ── Chat-Bereich ──────────────────────────────────────────────
         self._scroll = ctk.CTkScrollableFrame(
             self._root,
-            fg_color="#08080F",
-            scrollbar_button_color="#1E1E38",
-            scrollbar_button_hover_color="#2A2A50",
+            fg_color="#06060E",
+            scrollbar_button_color="#181830",
+            scrollbar_button_hover_color="#222244",
             corner_radius=0,
         )
         self._scroll.pack(fill="both", expand=True)
 
         # Divider
-        ctk.CTkFrame(self._root, height=1, fg_color="#18182A", corner_radius=0).pack(fill="x")
+        ctk.CTkFrame(self._root, height=1, fg_color="#121222", corner_radius=0).pack(fill="x")
 
         # ── Eingabe ───────────────────────────────────────────────────
-        bar = ctk.CTkFrame(self._root, height=72, fg_color="#0C0C1A", corner_radius=0)
+        bar = ctk.CTkFrame(self._root, height=64, fg_color="#0A0A18", corner_radius=0)
         bar.pack(fill="x")
         bar.pack_propagate(False)
 
         self._input = ctk.CTkEntry(
             bar,
             placeholder_text="Nachricht eingeben...",
-            height=44,
-            font=ctk.CTkFont(size=13),
-            fg_color="#141428",
-            border_color="#222244",
+            height=40,
+            font=ctk.CTkFont(size=12),
+            fg_color="#0E0E20",
+            border_color="#1A1A38",
             border_width=1,
-            text_color="#D8D8F0",
-            placeholder_text_color="#404055",
-            corner_radius=10,
+            text_color="#D0D0E8",
+            placeholder_text_color="#30304A",
+            corner_radius=8,
         )
-        self._input.pack(side="left", fill="x", expand=True, padx=(16, 8), pady=14)
+        self._input.pack(side="left", fill="x", expand=True, padx=(14, 8), pady=12)
         self._input.bind("<Return>", self._on_send)
 
         send_btn = ctk.CTkButton(
             bar,
             text="↑",
-            width=44,
-            height=44,
-            font=ctk.CTkFont(size=18, weight="bold"),
-            fg_color="#1A3A8A",
-            hover_color="#2244AA",
-            corner_radius=10,
+            width=40,
+            height=40,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            fg_color="#0F2A6A",
+            hover_color="#1A3A8A",
+            corner_radius=8,
             command=self._on_send,
         )
-        send_btn.pack(side="right", padx=(0, 16), pady=14)
+        send_btn.pack(side="right", padx=(0, 14), pady=12)
 
     # ------------------------------------------------------------------
     # Callbacks
