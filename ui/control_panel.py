@@ -725,7 +725,8 @@ class ControlPanel:
                 btn.configure(text=f" ▶  // {title}")
                 state["open"] = False
             else:
-                content.pack(fill="x", pady=(0, 0))
+                # after=btn → direkt unter dem Header, nicht am Ende der Liste
+                content.pack(fill="x", pady=(0, 0), after=btn)
                 btn.configure(text=f" ▼  // {title}")
                 state["open"] = True
 
