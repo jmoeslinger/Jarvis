@@ -286,8 +286,17 @@ class SpeechRecognizer:
                         max_duration=6.0,
                         stop_event=stop_event,
                     )
-                    consecutive_errors = 0
+                    # BUG-NEW-7: consecutive_errors wurde auf 0 zurückgesetzt
+                    # direkt nach _record() — BEVOR geprüft wurde ob audio None ist.
+                    # Wenn das Mikrofon stummgeschaltet oder defekt ist, gibt
+                    # _record() None zurück (keine Exception, nur kein Signal).
+                    # consecutive_errors wurde dann trotzdem genullt, der
+                    # Recovery-Mechanismus (>= 3 Fehler) wurde nie ausgelöst,
+                    # und Jarvis lauschte stumm ins Nichts ohne je zu versuchen
+                    # ein anderes Gerät zu nutzen.
+                    # Fix: nur zurücksetzen wenn tatsächlich Audio empfangen wurde.
                     if audio and not stop_event.is_set():
+                        consecutive_errors = 0
                         self._last_audio = audio   # Für Emotion/Speaker-Analyse
                         text = self._transcribe(audio)
                         if text:

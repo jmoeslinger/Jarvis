@@ -181,7 +181,14 @@ class Settings:
                     pass
 
     def reload(self):
-        self._load()
+        """BUG-NEW-3: reload() rief _load() ohne _save_lock auf.  Gleichzeitige
+        save()-Aufrufe (die asdict() unter _save_lock lesen) konnten so auf
+        halbwegs-aktualisierte Felder treffen, da _load() Felder einzeln mit
+        setattr() schreibt ohne Lock.  Beide Methoden müssen denselben Lock
+        halten damit save() und reload() sich nicht gegenseitig unterbrechen.
+        """
+        with self._save_lock:
+            self._load()
 
     def is_configured(self) -> bool:
         return bool(self.grok_api_key)

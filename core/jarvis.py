@@ -334,6 +334,21 @@ class JarvisCore:
         self._cancel_streaming.set()        # laufendes Streaming stoppen
         self.task_manager.stop()            # TaskManager Worker beenden
         self._stop_bg_listen_safe()
+        # BUG-NEW-6: ProactiveEngine und GestureRecognizer wurden nie gestoppt.
+        # Die ProactiveEngine laeuft als Hintergrund-Daemon weiter und kann
+        # nach jarvis.stop() noch Befehle via send_text_command() einreihen
+        # (z.B. "Tagesplanung: X Aufgaben offen") — der TaskManager ist aber
+        # schon gestoppt, sodass die Callbacks ins Leere laufen und Exceptions
+        # produzieren. Der GestureRecognizer haelt die MediaPipe-Hands-Session
+        # offen und liest weiter Frames aus dem shared_frame_provider.
+        try:
+            self._proactive_engine.stop()
+        except Exception:
+            pass
+        try:
+            self.gesture.stop()
+        except Exception:
+            pass
         # Gesprächs-Log persistent speichern
         try:
             self.conversation_log.flush()
@@ -357,12 +372,33 @@ class JarvisCore:
         """
         Führt einen Text-Befehl direkt aus (ohne Queue) — für interne Nutzung.
         Für externe Aufrufe bitte send_text_command() verwenden.
+
+        BUG-NEW-5: State-Check und Thread-Start waren nicht atomar.
+        Zwischen dem `if self.state in (...)` und dem `threading.Thread().start()`
+        konnte der State von WAKE_LISTENING auf PROCESSING wechseln (z.B. weil
+        der TaskManager-Worker gleichzeitig einen Task startete), sodass zwei
+        Threads gleichzeitig _handle_text_command() / _run_command() aufriefen.
+        _run_command() ist nicht für parallele Ausführung ausgelegt:
+          - _cancel_streaming.clear() im zweiten Aufruf überschreibt das Event
+            des ersten Aufrufs → laufende Abbruch-Signale gehen verloren.
+          - _set_state(PROCESSING) wird zweimal gesetzt → doppelte Notifications.
+        Fix: _activation_lock verwenden (non-blocking acquire) um sicherzustellen,
+        dass immer nur ein direkter Befehl gleichzeitig ausgeführt wird.
         """
         if self.state in (State.PROCESSING, State.SPEAKING, State.CMD_LISTENING):
             return
-        threading.Thread(
-            target=self._handle_text_command, args=(text,), daemon=True
-        ).start()
+        if not self._activation_lock.acquire(blocking=False):
+            logger.debug("send_text_command_direct: Aktivierung läuft bereits, übersprungen.")
+            return
+        def _run_and_release():
+            try:
+                self._handle_text_command(text)
+            finally:
+                try:
+                    self._activation_lock.release()
+                except RuntimeError:
+                    pass
+        threading.Thread(target=_run_and_release, daemon=True).start()
 
     def improve_last_response(self):
         """Fordert eine verbesserte Version der letzten KI-Antwort an."""

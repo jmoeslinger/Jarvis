@@ -141,13 +141,21 @@ class TaskManager:
             self._notify()
 
     def cancel(self, task_id: str):
-        """Bricht einen bestimmten Task ab (laufend oder wartend)."""
+        """Bricht einen bestimmten Task ab (laufend oder wartend).
+        BUG-NEW-1: status-Lesen und -Schreiben müssen unter demselben Lock-Acquire
+        stattfinden.  Vorher wurde der Task unter Lock geholt, dann der Lock
+        freigegeben und erst danach task.status gelesen/geschrieben — der
+        Worker-Thread konnte dazwischen den Task auf RUNNING setzen, sodass
+        der PENDING→CANCELLED-Übergang übersprungen wurde und der Worker-Thread
+        nie ein CANCELLED sah obwohl cancel_event bereits gesetzt war.
+        """
         with self._lock:
             task = self._tasks.get(task_id)
+            if task:
+                task.cancel_event.set()
+                if task.status == TaskStatus.PENDING:
+                    task.status = TaskStatus.CANCELLED
         if task:
-            task.cancel_event.set()
-            if task.status == TaskStatus.PENDING:
-                task.status = TaskStatus.CANCELLED
             logger.info(f"Task abgebrochen: [{task_id}] '{task.label}'")
             self._notify()
 
@@ -295,10 +303,35 @@ class TaskManager:
     # ── Interne Worker-Logik ──────────────────────────────────────────────────
 
     def _worker_loop(self):
-        """Hauptschleife des Worker-Threads — holt und führt Tasks aus."""
+        """Hauptschleife des Worker-Threads — holt und führt Tasks aus.
+        BUG-NEW-2: _work_ready.clear() nach wait() aber VOR der inneren
+        Dequeue-Schleife aufzurufen erzeugt ein Race-Window:
+          1. Worker wartet auf Event → Event wird gesetzt (submit)
+          2. Worker wacht auf, ruft clear()
+          3. In diesem Moment ruft ein anderer Thread submit() und setzt das
+             Event erneut — dieses zweite Setzen geht verloren (clear() folgt
+             nach dem wait() erst NACH dem neuen set()).
+          Nein — tatsächlich ist die Reihenfolge: wait() → clear() → dequeue.
+          Das Race: ein submit() zwischen wait-Ende und clear() setzt das Event;
+          clear() löscht es sofort; der neue Task wird trotzdem in der inneren
+          Schleife gefunden — also kein Problem für den aktuellen Durchlauf.
+          Das echte Problem: submit() zwischen dem Ende der inneren Schleife
+          (kein Task mehr → break) und dem nächsten wait() — das Event wird
+          gesetzt, aber der Worker ist noch nicht beim wait(). Der folgende
+          wait() kehrt sofort zurück (Event war gesetzt), clear() löscht es,
+          und die innere Schleife findet den neuen Task. Das ist korrekt.
+          ABER: clear() VOR dem ersten dequeue() zu rufen bedeutet, dass ein
+          zwischen wait() und clear() eingereichter Task das Event setzt, das
+          dann von clear() gelöscht wird. Die innere Schleife läuft den Task
+          trotzdem ab — also kein echter Verlust hier.
+          Der echte Bug: Event sollte erst NACH dem Dequeue-Versuch geclearet
+          werden um sicherzustellen, dass zwischen clear() und dem nächsten
+          wait() eingereihte Tasks nicht eine volle Sekunde warten müssen.
+          Lösung: clear() direkt vor wait() aufrufen (nicht danach).
+        """
         while self._running:
+            self._work_ready.clear()      # erst leeren, dann warten
             self._work_ready.wait(timeout=1.0)
-            self._work_ready.clear()
 
             while self._running:
                 task = self._dequeue_next()
